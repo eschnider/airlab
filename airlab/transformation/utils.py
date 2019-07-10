@@ -90,14 +90,14 @@ def upsample_displacement(displacement, new_size, interpolation="linear"):
 """
     Warp image with displacement
 """
-def warp_image(image, displacement):
+def warp_image(image, displacement, interpolation_mode='bilinear', padding_mode='zeros'):
 
     image_size = image.size
 
     grid = compute_grid(image_size, dtype=image.dtype, device=image.device)
 
     # warp image
-    warped_image = F.grid_sample(image.image, displacement + grid)
+    warped_image = F.grid_sample(image.image, displacement + grid, mode=interpolation_mode, padding_mode=padding_mode)
 
     return iutils.Image(warped_image, image_size, image.spacing, image.origin)
 
