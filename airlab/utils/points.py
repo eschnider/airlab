@@ -35,6 +35,8 @@ class Points:
 
         - vtk: the vtk polydata is supported as well
 
+        - fcsv: 3d slicer fiducials file
+
         filename (str): filename
         return (array): two dimensional array
         """
@@ -58,6 +60,18 @@ class Points:
                 one_line = ''.join(''.join(lines[5:]).split('\n'))
                 one_line = [float(p) for p in one_line.split()]
                 return np.array(one_line).reshape((n, 3))
+
+        elif filename.endswith("fcsv"):
+            with open(filename) as fp:
+                lines = fp.readlines()
+                if not lines[0].startswith("# Markups fiducial file"):
+                    raise Exception("Tried to read invalid fiducial file")
+                column_headers = lines[2].strip('#columns = ')
+            fiducials = np.genfromtxt(filename, delimiter=',', names=column_headers, dtype=None, encoding=None)
+            x_coords = np.expand_dims(fiducials['x'], 1)
+            y_coords = np.expand_dims(fiducials['y'], 1)
+            z_coords = np.expand_dims(fiducials['z'], 1)
+            return np.concatenate((x_coords, y_coords, z_coords), axis=1)
 
         else:
             raise Exception("Format not supported: "+str(filename))
