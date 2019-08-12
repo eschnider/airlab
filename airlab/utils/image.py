@@ -318,37 +318,11 @@ def create_image_pyramid(image, down_sample_factor):
 
     image_dim = len(image.size)
     image_pyramide = []
-    if image_dim == 2:
+    if image_dim == 2 or image_dim == 3:
+
         for level in down_sample_factor:
-            sigma = (th.tensor(level)/2).to(dtype=th.float32)
-
-            kernel = kernelFunction.gaussian_kernel_2d(sigma.numpy(), asTensor=True)
-            padding = np.array([(x - 1)/2 for x in kernel.size()], dtype=int).tolist()
-            kernel = kernel.unsqueeze(0).unsqueeze(0)
-            kernel = kernel.to(dtype=image.dtype, device=image.device)
-
-            image_sample = F.conv2d(image.image, kernel, stride=level, padding=padding)
-            image_size = image_sample.size()[-image_dim:]
-            image_spacing = [x*y for x, y in zip(image.spacing, level)]
-            image_origin = image.origin
-            image_pyramide.append(Image(image_sample, image_size, image_spacing, image_origin))
-
-        image_pyramide.append(image)
-    elif image_dim == 3:
-        for level in down_sample_factor:
-            sigma = (th.tensor(level)/2).to(dtype=th.float32)
-
-            kernel = kernelFunction.gaussian_kernel_3d(sigma.numpy(), asTensor=True)
-            padding = np.array([(x - 1) / 2 for x in kernel.size()], dtype=int).tolist()
-            kernel = kernel.unsqueeze(0).unsqueeze(0)
-            kernel = kernel.to(dtype=image.dtype, device=image.device)
-
-            image_sample = F.conv3d(image.image, kernel, stride=level, padding=padding)
-            image_size = image_sample.size()[-image_dim:]
-            image_spacing = [x*y for x, y in zip(image.spacing, level)]
-            image_origin = image.origin
-            image_pyramide.append(Image(image_sample, image_size, image_spacing, image_origin))
-
+            down_sampled_image = resize_image(image, level)
+            image_pyramide.append(down_sampled_image)
         image_pyramide.append(image)
 
     else:
@@ -356,3 +330,33 @@ def create_image_pyramid(image, down_sample_factor):
         sys.exit(-1)
 
     return image_pyramide
+
+
+"""
+    Down/Up sample a 2-d or 3-d image by a given factor
+"""
+def resize_image(image, resize_factor):
+
+    image_dim = len(image.size)
+
+    sigma = (th.tensor(resize_factor) / 2).to(dtype=th.float32)
+
+    kernel = kernelFunction.gaussian_kernel_3d(sigma.numpy(), asTensor=True)
+    padding = np.array([(x - 1) / 2 for x in kernel.size()], dtype=int).tolist()
+    kernel = kernel.unsqueeze(0).unsqueeze(0)
+    kernel = kernel.to(dtype=image.dtype, device=image.device)
+
+    if image_dim == 2:
+        image_sample = F.conv2d(image.image, kernel, stride=resize_factor, padding=padding)
+    elif image_dim == 3:
+        image_sample = F.conv3d(image.image, kernel, stride=resize_factor, padding=padding)
+    else:
+        print("Error: ", image_dim, " is not supported with resize_image()")
+
+    image_size = image_sample.size()[-image_dim:]
+    image_spacing = [x * y for x, y in zip(image.spacing, resize_factor)]
+    image_origin = image.origin
+
+    down_sampled_image = Image(image_sample, image_size, image_spacing, image_origin)
+
+    return down_sampled_image
