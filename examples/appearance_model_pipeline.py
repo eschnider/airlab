@@ -15,8 +15,8 @@ def main():
     IS_DEBUG =False
 
     DO_RESAMPLE = False
-    DO_SIMILARITY_REGISTRATION = False
-    DO_BSPLINE_REGISTRATION = False
+    DO_RIGID_REGISTRATION = True
+    DO_BSPLINE_REGISTRATION = True
     DO_PCA = True
     body_part_choice = 'lower'
     reference_scan_name = '001_lower'
@@ -34,34 +34,34 @@ def main():
     if IS_DEBUG:
         data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base_debug"
         resampled_data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/resampled_debug"
-        similarity_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/similarity_registered_debug"
+        rigid_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/rigid_registered_debug"
         bspline_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/bspline_registered_debug"
         pca_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/pca_debug"
     else:
         data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base"
         resampled_data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/resampled"
-        similarity_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/similarity_registered"
+        rigid_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/rigid_registered"
         bspline_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/bspline_registered"
         pca_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/pca"
 
     if DO_RESAMPLE:
         resample_to_common_domain(data_path, resampled_data_path, body_part_choice)
 
-    # similarity registration towards the mean scan (this one is the moving image)
+    # rigid registration towards the mean scan (this one is the moving image)
 
-    if DO_SIMILARITY_REGISTRATION:
+    if DO_RIGID_REGISTRATION:
         moving_scans, reference_scan = collect_skeleton_scans(resampled_data_path,
                                                               reference_scan_name=reference_scan_name,
                                                               body_part_choice=body_part_choice)  # type: (list[Scan], Scan)
 
         down_sample_factor = [8, 8, 8]
 
-        perform_and_save_similarity_registration_on_all_scans(reference_scan, moving_scans, similarity_registered_path,
-                                                              down_sample_factor, device, dtype)
+        perform_and_save_rigid_registration_on_all_scans(reference_scan, moving_scans, rigid_registered_path,
+                                                         down_sample_factor, device, dtype)
     if DO_BSPLINE_REGISTRATION:
         reference_scan = SkeletonScan(os.path.join(resampled_data_path, reference_scan_name))
-        file_naming = {'volume': 'similarity_warped_image.nii.gz', 'mask': 'similarity_warped_mask.nii.gz'}
-        moving_scans = collect_skeleton_scans(similarity_registered_path,
+        file_naming = {'volume': 'rigid_warped_image.nii.gz', 'mask': 'rigid_warped_mask.nii.gz'}
+        moving_scans = collect_skeleton_scans(rigid_registered_path,
                                               reference_scan_name=None,
                                               body_part_choice=body_part_choice,
                                               file_naming=file_naming)  # type: (list[Scan])
@@ -94,6 +94,9 @@ def main():
         pca = PCA(n_components=sample_number)
         pca.fit(X)
 
+        print("=================================================================")
+        print("PCA done")
+
         new_sample = np.zeros_like(displacement_field_vector)
         alphas = np.random.standard_normal(sample_number)
 
@@ -117,6 +120,9 @@ def main():
         if not os.path.exists(scan_save_dir):
             os.makedirs(scan_save_dir, exist_ok=False)
         warped_image.write('{}/sample.nii.gz'.format(scan_save_dir))
+
+        print("=================================================================")
+        print("New sample saved")
 
 def collect_skeleton_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
     # collect all dirs in data path
@@ -236,9 +242,9 @@ def perform_and_save_bspline_registration_on_all_scans(reference_scan, moving_sc
     print("All registrations done")
 
 
-def perform_and_save_similarity_registration_on_all_scans(reference_scan, moving_scans, save_dir,
-                                                          down_sample_factor=None, device=th.device("cpu"),
-                                                          dtype=th.float32):
+def perform_and_save_rigid_registration_on_all_scans(reference_scan, moving_scans, save_dir,
+                                                     down_sample_factor=None, device=th.device("cpu"),
+                                                     dtype=th.float32):
     f_image_original_size = reference_scan.volume
     f_mask = reference_scan.mask
     if down_sample_factor is not None or down_sample_factor == [1, 1, 1]:
@@ -271,12 +277,12 @@ def perform_and_save_similarity_registration_on_all_scans(reference_scan, moving
 
         number_of_iterations = 120
 
-        similarity_registrator = SimilarityRegistrator(number_of_iterations, device, dtype)
+        rigid_registrator = RigidRegistrator(number_of_iterations, device, dtype)
 
         print("perform registration")
         start = time.time()
 
-        displacement = similarity_registrator.perform_registration(fixed_data, moving_data)
+        displacement = rigid_registrator.perform_registration(fixed_data, moving_data)
 
         print("upsample displacement field")
         upsampled_displacement = al.transformation.utils.upsample_displacement(displacement.clone().to(device='cpu'),
@@ -302,11 +308,11 @@ def perform_and_save_similarity_registration_on_all_scans(reference_scan, moving
         scan_save_dir = os.path.join(save_dir, moving_scan.name)
         if not os.path.exists(scan_save_dir):
             os.makedirs(scan_save_dir, exist_ok=False)
-        warped_image.write('{}/similarity_warped_image.nii.gz'.format(scan_save_dir))
-        warped_mask.write('{}/similarity_warped_mask.nii.gz'.format(scan_save_dir))
-        upsampled_displacement_image.write('{}/similarity_displacement_image_unit.nii.gz'.format(scan_save_dir))
+        warped_image.write('{}/rigid_warped_image.nii.gz'.format(scan_save_dir))
+        warped_mask.write('{}/rigid_warped_mask.nii.gz'.format(scan_save_dir))
+        upsampled_displacement_image.write('{}/rigid_displacement_image_unit.nii.gz'.format(scan_save_dir))
     print("=================================================================")
-    print("Similarity registration done")
+    print("Rigid registration done")
 
 
 if __name__ == "__main__":
