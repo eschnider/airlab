@@ -175,7 +175,7 @@ class MSE_multilabel(_PairwiseImageLoss):
         self.warped_moving_image = F.grid_sample(self._moving_image.image, displacement)
 
         # compute squared differences
-        value = (th.min(self.warped_moving_image - self._fixed_image.image, th.ones_like(self._fixed_image.image))).pow(2)
+        value = (th.min(th.abs(self.warped_moving_image - self._fixed_image.image), th.ones_like(self._fixed_image.image))).pow(2)
 
         # mask values
         value = th.masked_select(value, mask)
