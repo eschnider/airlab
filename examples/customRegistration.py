@@ -1,6 +1,7 @@
 import os
 from abc import abstractmethod
 import torch as th
+
 import airlab as al
 
 
@@ -117,7 +118,8 @@ class BsplineRegistrator(Registrator):
     temp_displacement_save_path = None
     save_intermediate_displacements = False
 
-    def __init__(self, number_of_iterations, save_intermediate_displacements=False, device=th.device("cpu"), dtype=th.float32):
+    def __init__(self, number_of_iterations, save_intermediate_displacements=False, device=th.device("cpu"),
+                 dtype=th.float32):
         super().__init__(device, dtype)
         self.number_of_iterations = number_of_iterations
         self.save_intermediate_displacements = save_intermediate_displacements
@@ -197,7 +199,8 @@ class BsplineRegistrator(Registrator):
 
                     if self.save_intermediate_displacements:
                         tmp_displacement_path = os.path.join(self.temp_displacement_save_path,
-                                                             'tmp/bspline_displacement_image_level_' + str(level) + '.vtk')
+                                                             'tmp/bspline_displacement_image_level_' + str(
+                                                                 level) + '.vtk')
                         tmp_displacement.write(tmp_displacement_path)
 
                     # in order to not invert the displacement field, the fixed points are transformed to match the moving points
