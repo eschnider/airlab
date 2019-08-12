@@ -62,7 +62,7 @@ class BsplineRegistrator(Registrator):
     regularisation_weight = [1e-2, 1e-1, 1e-0, 1e+2]
     number_of_iterations = [20, 10, 0, 0]
     sigma = [[9, 9, 9], [9, 9, 9], [9, 9, 9], [9, 9, 9]]
-    step_size = [1e-2, 4e-3, 2e-3, 2e-3]
+    step_size = [3e-3, 4e-3, 2e-3, 2e-3]
     bspline_order = 3
     temp_displacement_save_path = None
     save_intermediate_displacements = False
