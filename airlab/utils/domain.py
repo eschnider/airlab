@@ -189,3 +189,28 @@ def get_joint_domain_images(fixed_image, moving_image, default_value=0, interpol
     return f_image, f_mask, m_image, m_mask, cm_displacement
 
 
+def find_common_domain(reference_image, moving_images):
+    # common origin
+
+    origin = reference_image.origin
+    for image in moving_images:
+        m_origin = image.origin
+        origin = np.minimum(m_origin, origin)
+
+    # common extent
+
+    extent = np.array(reference_image.origin) + (np.array(reference_image.size) - 1) * np.array(reference_image.spacing)
+    for image in moving_images:
+        m_extent = np.array(image.origin) + (np.array(image.size) - 1) * np.array(image.spacing)
+        extent = np.maximum(extent, m_extent)
+
+    # common spacing
+    spacing = reference_image.spacing
+    for image in moving_images:
+        m_spacing = image.spacing
+        spacing = np.minimum(spacing, m_spacing)
+
+    # common size
+    size = np.ceil(((extent - origin) / spacing) + 1).astype(int)
+
+    return origin, extent, spacing, size
