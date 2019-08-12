@@ -23,22 +23,21 @@ class Registrator:
         ...
 
 
-class SimilarityRegistrator(Registrator):
-    number_of_iterations = None
-    step_size = None
+class ProjectiveRegistrator(Registrator):
 
-    def __init__(self, number_of_iterations, device=th.device("cpu"), dtype=th.float32, step_size=0.01):
+    def __init__(self, device=th.device("cpu"), dtype=th.float32):
         super().__init__(device, dtype)
-        self.using_landmarks = False  # landmarks in similarity reg not supported yet
-        self.number_of_iterations = number_of_iterations
-        self.step_size = step_size
+
+    @property
+    @abstractmethod
+    def projective_transformation(self):
+        ...
 
     def perform_registration(self, fixed_reg_data, moving_reg_data):
-
         # create pairwise registration object
         registration = al.PairwiseRegistration()
         # choose the affine transformation model
-        transformation = al.transformation.pairwise.SimilarityTransformation(fixed_reg_data.image, opt_cm=True)
+        transformation = self.projective_transformation(fixed_reg_data.image, opt_cm=True)
         transformation.init_translation(fixed_reg_data.image)
         registration.set_transformation(transformation)
         # choose the crazy multilabel Mean Squared Error as image loss
@@ -56,6 +55,57 @@ class SimilarityRegistrator(Registrator):
         # return the created displacement field
         displacement = transformation.get_displacement()  # this is a unit displacement
         return displacement
+
+
+class AffineRegistrator(ProjectiveRegistrator):
+    number_of_iterations = None
+    step_size = None
+
+    def __init__(self, number_of_iterations, device=th.device("cpu"), dtype=th.float32, step_size=0.01):
+        super().__init__(device, dtype)
+        self._projective_transformation = None
+        self.using_landmarks = False  # landmarks in similarity reg not supported yet
+        self.number_of_iterations = number_of_iterations
+        self.step_size = step_size
+
+    @property
+    def projective_transformation(self):
+        self._projective_transformation = al.transformation.pairwise.AffineTransformation
+        return self._projective_transformation
+
+
+class SimilarityRegistrator(ProjectiveRegistrator):
+    number_of_iterations = None
+    step_size = None
+
+    def __init__(self, number_of_iterations, device=th.device("cpu"), dtype=th.float32, step_size=0.01):
+        super().__init__(device, dtype)
+        self._projective_transformation = None
+        self.using_landmarks = False  # landmarks in similarity reg not supported yet
+        self.number_of_iterations = number_of_iterations
+        self.step_size = step_size
+
+    @property
+    def projective_transformation(self):
+        self._projective_transformation = al.transformation.pairwise.SimilarityTransformation
+        return self._projective_transformation
+
+
+class RigidRegistrator(ProjectiveRegistrator):
+    number_of_iterations = None
+    step_size = None
+
+    def __init__(self, number_of_iterations, device=th.device("cpu"), dtype=th.float32, step_size=0.01):
+        super().__init__(device, dtype)
+        self._projective_transformation = None
+        self.using_landmarks = False  # landmarks in similarity reg not supported yet
+        self.number_of_iterations = number_of_iterations
+        self.step_size = step_size
+
+    @property
+    def projective_transformation(self):
+        self._projective_transformation = al.transformation.pairwise.RigidTransformation
+        return self._projective_transformation
 
 
 class BsplineRegistrator(Registrator):

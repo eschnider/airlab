@@ -1,6 +1,6 @@
 import os
 import sys
-from examples.customRegistration import SimilarityRegistrator, BsplineRegistrator
+from examples.customRegistration import RigidRegistrator, BsplineRegistrator
 from examples.customData import RegistrationData, ScanGroup, SkeletonScan
 import numpy as np
 from sklearn.decomposition import PCA
