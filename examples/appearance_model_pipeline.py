@@ -177,7 +177,7 @@ def perform_and_save_bspline_registration_on_all_scans(reference_scan, moving_sc
     if using_landmarks:
         fixed_points = reference_scan.landmarks
 
-    number_of_iterations = [20, 10, 0, 0]
+    number_of_iterations = [120, 50, 0, 0]
     pyramid_sampling_factors = [[16, 16, 16], [8, 8, 8]]  # a full sized image always tops off the pyramid
 
     fixed_image_pyramid = al.create_image_pyramid(f_image, pyramid_sampling_factors)
@@ -206,7 +206,7 @@ def perform_and_save_bspline_registration_on_all_scans(reference_scan, moving_sc
 
         bspline_registrator = BsplineRegistrator(number_of_iterations, save_intermediate_displacements=False, device=device, dtype=dtype)
         bspline_registrator.using_landmarks = using_landmarks
-        fixed_to_moving_displacement, upsampled_displacement = bspline_registrator.perform_registration(fixed_registration_data, moving_registration_data)
+        fixed_to_moving_displacement, upsampled_displacement = bspline_registrator.perform_fixed_to_moving_registration(fixed_registration_data, moving_registration_data)
 
         warped_image = al.transformation.utils.warp_image(f_image, upsampled_displacement, interpolation_mode='nearest',
                                                           padding_mode='zeros')

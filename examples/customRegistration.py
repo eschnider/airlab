@@ -42,7 +42,8 @@ class SimilarityRegistrator(Registrator):
         transformation.init_translation(fixed_reg_data.image)
         registration.set_transformation(transformation)
         # choose the crazy multilabel Mean Squared Error as image loss
-        image_loss = al.loss.pairwise.MSE_multilabel(fixed_reg_data.image, moving_reg_data.image, fixed_mask=fixed_reg_data.mask,
+        image_loss = al.loss.pairwise.MSE_multilabel(fixed_reg_data.image, moving_reg_data.image,
+                                                     fixed_mask=fixed_reg_data.mask,
                                                      moving_mask=moving_reg_data.mask)
         registration.set_image_loss([image_loss])
         # choose the Adam optimizer to minimize the objective
