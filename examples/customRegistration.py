@@ -162,7 +162,8 @@ class BsplineRegistrator(Registrator):
                 registration.set_transformation(transformation)
 
                 # choose the Mean Squared Error as image loss
-                image_loss = al.loss.pairwise.MSE(fix_im_level, mov_im_level, mov_msk_level, fix_msk_level)
+                image_loss = al.loss.pairwise.MSE_multilabel(fix_im_level, mov_im_level, moving_mask=mov_msk_level,
+                                                             fixed_mask=fix_msk_level)
 
                 registration.set_image_loss([image_loss])
 
