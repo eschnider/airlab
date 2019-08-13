@@ -18,8 +18,10 @@ def main():
     DO_RIGID_REGISTRATION = True
     DO_BSPLINE_REGISTRATION = True
     DO_PCA = True
+    DO_TEST_REAPPLY_DISPLACEMENT = True
     body_part_choice = 'lower'
     reference_scan_name = '001_lower'
+    n_samples_to_be_generated = 3
 
     # set the used data type
     dtype = th.float32
@@ -37,12 +39,14 @@ def main():
         rigid_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/rigid_registered_debug"
         bspline_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/bspline_registered_debug"
         pca_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/pca_debug"
+        test_displacement_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/test_displacement_debug"
     else:
         data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base"
         resampled_data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/resampled"
         rigid_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/rigid_registered"
         bspline_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/bspline_registered"
         pca_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/pca"
+        test_displacement_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/test_displacement"
 
     if DO_RESAMPLE:
         resample_to_common_domain(data_path, resampled_data_path, body_part_choice)
@@ -77,52 +81,103 @@ def main():
                                               body_part_choice=body_part_choice,
                                               file_naming=file_naming)  # type: (list[Scan])
 
-        displacement_field_shape = moving_scans[0].displacement.size
-        ndims = len(displacement_field_shape)
-        feature_number = ndims*np.prod(displacement_field_shape)
-        sample_number = len(moving_scans)
-        # vectorize all deformation fields and save in X
-        X = np.zeros((sample_number, feature_number))
-        for index, scan in enumerate(moving_scans):
-            displacement = scan.displacement.image.squeeze()  # type: al.Displacement
-            displacement_field_array = displacement.numpy()
-            displacement_field_vector = np.reshape(displacement_field_array, [feature_number, 1,1,1])
-            displacement_field_vector = np.squeeze(displacement_field_vector)
-            X[index, :] = displacement_field_vector
+        displacement_fields = [scan.displacement for scan in moving_scans]
+        X, displacement_field_original_shape = create_component_matrix_for_PCA(displacement_fields)
 
         # Compute PCA from X
+        sample_number = X.shape[0]
         pca = PCA(n_components=sample_number)
         pca.fit(X)
 
         print("=================================================================")
         print("PCA done")
 
-        new_sample = np.zeros_like(displacement_field_vector)
-        alphas = np.random.standard_normal(sample_number)
+        for n_th_sample in range(n_samples_to_be_generated):
+            # sample new deformation fields from shape model
+            new_feature_vector_sample = sample_from_pca(pca)
 
-        for component, eigenvalue, alpha in zip(pca.components_, pca.singular_values_, alphas):
-            new_sample = new_sample + np.sqrt(eigenvalue) * alpha * component
+            # reshape the newly sampled deformation field
+            new_displacement = create_displacement_from_feature_vector(new_feature_vector_sample,
+                                                                   displacement_field_original_shape, displacement_fields)
 
-        new_deformation_tensor = np.reshape(new_sample, displacement_field_array.shape)
+            warped_image = apply_displacement_to_image(reference_scan, new_displacement)
 
-        # sample new deformation fields from shape model
-        new_deformation = moving_scans[0].displacement.image.clone()  # type: al.Displacement
+            scan_save_dir = pca_path
+            file_name = 'sample_{}.nii.gz'.format(n_th_sample)
+            save_file(warped_image, scan_save_dir, file_name)
 
-        new_deformation_tensor = th.from_numpy(new_deformation_tensor)
-        new_deformation.image = new_deformation_tensor.squeeze().squeeze()
-        new_deformation.squeeze().squeeze()
-
-        upsampled_deformation_field = al.transformation.utils.upsample_displacement(new_deformation.image, reference_scan.volume.size)
-        def_field = th.unsqueeze(upsampled_deformation_field,0).to(dtype=th.float32)
-        warped_image = al.transformation.utils.warp_image(reference_scan.volume, def_field, interpolation_mode='nearest', padding_mode='zeros')
-
-        scan_save_dir = pca_path
-        if not os.path.exists(scan_save_dir):
-            os.makedirs(scan_save_dir, exist_ok=False)
-        warped_image.write('{}/sample.nii.gz'.format(scan_save_dir))
+            print("New sample saved")
 
         print("=================================================================")
-        print("New sample saved")
+        print("All new samples generated and saved")
+
+
+    if DO_TEST_REAPPLY_DISPLACEMENT:
+
+        reference_scan = SkeletonScan(os.path.join(resampled_data_path, reference_scan_name))
+        file_naming = {'volume': 'bspline_warped_image.nii.gz',
+                       'displacement': 'bspline_displacement_image_unit.vtk'}
+        moving_scans = collect_skeleton_scans(bspline_registered_path,
+                                              reference_scan_name=None,
+                                              body_part_choice=body_part_choice,
+                                              file_naming=file_naming)  # type: (list[Scan])
+
+        test_displacement = moving_scans[0].displacement
+        test_image_warped = apply_displacement_to_image(reference_scan, test_displacement)
+        scan_save_dir = test_displacement_path
+        file_name = 'test_{}.nii.gz'.format(moving_scans[0].name)
+        save_file(test_image_warped, scan_save_dir, file_name)
+
+
+def save_file(warped_image, scan_save_dir, file_name):
+    if not os.path.exists(scan_save_dir):
+        os.makedirs(scan_save_dir, exist_ok=False)
+    warped_image.write(os.path.join(scan_save_dir, file_name))
+
+
+def create_displacement_from_feature_vector(feature_vector, displacement_field_original_shape, displacement_fields):
+    new_deformation_tensor = np.reshape(feature_vector, displacement_field_original_shape)
+    new_deformation = displacement_fields[0].image.clone()  # type: al.Displacement
+    new_deformation_tensor = th.from_numpy(new_deformation_tensor)
+    new_deformation.image = new_deformation_tensor.squeeze().squeeze()
+    new_deformation.squeeze().squeeze()
+
+    return new_deformation
+
+
+def apply_displacement_to_image(reference_scan, displacement):
+    upsampled_deformation_field = al.transformation.utils.upsample_displacement(displacement.image.squeeze(),
+                                                                                reference_scan.volume.size)
+    def_field = th.unsqueeze(upsampled_deformation_field, 0).to(dtype=th.float32)
+    warped_image = al.transformation.utils.warp_image(reference_scan.volume, def_field, interpolation_mode='nearest',
+                                                      padding_mode='zeros')
+    return warped_image
+
+
+def sample_from_pca(pca):
+    new_sample = np.zeros(pca.n_features_)
+    alphas = np.random.standard_normal(pca.n_components)
+    for component, eigenvalue, alpha in zip(pca.components_, pca.singular_values_, alphas):
+        new_sample = new_sample + np.sqrt(eigenvalue) * alpha * component
+    return new_sample
+
+
+def create_component_matrix_for_PCA(displacement_fields):
+    displacement_field_spatial_shape = displacement_fields[0].size
+    ndims_displacement_vectors = len(displacement_field_spatial_shape)
+    feature_number = ndims_displacement_vectors * np.prod(displacement_field_spatial_shape)
+    sample_number = len(displacement_fields)
+    # vectorize all deformation fields and save in X
+    X = np.zeros((sample_number, feature_number))
+    for index, displacement_field in enumerate(displacement_fields):
+        displacement = displacement_field.image.squeeze()  # type: al.Displacement
+        displacement_field_array = displacement.numpy()
+        displacement_field_reshaped = np.reshape(displacement_field_array, [feature_number, 1, 1, 1])
+        displacement_field_reshaped = np.squeeze(displacement_field_reshaped)
+        X[index, :] = displacement_field_reshaped
+    displacement_field_original_shape = displacement_field_array.shape
+    return X, displacement_field_original_shape
+
 
 def collect_skeleton_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
     # collect all dirs in data path
