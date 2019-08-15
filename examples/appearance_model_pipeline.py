@@ -8,6 +8,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 import torch as th
 import time
+import csv
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import airlab as al
@@ -53,6 +54,8 @@ def main(body_part_choice='lower', reference_scan_name='001_lower'):
             reference_scan_name)
         pca_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/pca"
         test_displacement_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/test_displacement"
+        csv_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/csv_files"
+        verse_path = "/home/eva/PhD/Data/VerSe2019"
 
     if DO_RESAMPLE:
         resample_to_common_domain(data_path, resampled_data_path, body_part_choice)
@@ -143,6 +146,89 @@ def main(body_part_choice='lower', reference_scan_name='001_lower'):
         scan_save_dir = test_displacement_path
         file_name = 'test_{}.nii.gz'.format(moving_scans[0].name)
         save_file(test_image_warped, scan_save_dir, file_name)
+
+    if DO_SCANS_TO_CSV:
+        run_type = 'base'
+        include_pca_scans = True
+        include_verse_scans = True
+        volume_type = 'no_bed_volume'
+        label_type = 'binary_bones'
+        paths_to_include = [data_path]
+        if include_pca_scans is True:
+            paths_to_include.append(pca_path)
+            run_type = '{}_withPCA'.format(run_type)
+        verse_subpaths_to_include = ['training_phase_1_release', 'training_phase_2_release', 'training_phase_3_release']
+        if include_verse_scans:
+            run_type = '{}_withVerse'.format(run_type)
+
+        all_scans = []  # type: (list[SkeletonScan])
+        file_naming = {'volume': '{}.nii.gz'.format(volume_type),
+                       'label': '{}.nii.gz'.format(label_type)}
+
+        if body_part_choice == 'all':
+            body_part_choices = ['lower', 'upper']
+        else:
+            body_part_choices = [body_part_choice]
+        for path in paths_to_include:
+            for body_part in body_part_choices:
+                collected_scans = collect_skeleton_scans(path,
+                                                         reference_scan_name=None,
+                                                         body_part_choice=body_part,
+                                                         file_naming=file_naming)  # type: (list[SkeletonScan])
+                all_scans = all_scans + collected_scans
+
+        if include_verse_scans:
+            for subpath_name in verse_subpaths_to_include:
+                subpath = os.path.join(verse_path, subpath_name)
+                verse_scans = collect_verse_scans(subpath)
+                all_scans = all_scans + verse_scans
+
+        all_file_names = []
+
+        for scan in all_scans:
+            i = 0
+            scan_name = scan.name
+            while scan_name in all_file_names:
+                scan_name = scan.name
+                scan_name = '{}_{}'.format(scan_name, i)
+                i = i + 1
+            if i > 0:
+                scan.name = scan_name
+            all_file_names.append(scan.name)
+
+        csv_path = os.path.join(csv_path, run_type)
+        write_nifty_csvs(all_scans, csv_path, volume_type, label_type)
+
+
+def write_nifty_csvs(all_scans, csv_path, volume_type, label_type):
+    if not os.path.exists(csv_path):
+        os.makedirs(csv_path, exist_ok=False)
+
+    # VOLUME
+    file_mapping_csv_path = os.path.join(csv_path, 'volume_file_{}.csv'.format(volume_type))
+    with open(file_mapping_csv_path, mode='w+') as csvfile:
+        filewriter = csv.writer(csvfile, delimiter=',',
+                                quotechar='|', quoting=csv.QUOTE_MINIMAL)
+        for scan in all_scans:
+            filewriter.writerow([scan.name, scan.volume_path])
+    # LABEL
+    file_mapping_csv_path = os.path.join(csv_path, 'label_file_{}.csv'.format(label_type))
+    with open(file_mapping_csv_path, mode='w+') as csvfile:
+        filewriter = csv.writer(csvfile, delimiter=',',
+                                quotechar='|', quoting=csv.QUOTE_MINIMAL)
+        for scan in all_scans:
+            filewriter.writerow([scan.name, scan.label_path])
+    data_split_csv_path = os.path.join(csv_path, 'data_split.csv')
+    with open(data_split_csv_path, mode='w+') as csvfile:
+        filewriter = csv.writer(csvfile, delimiter=',',
+                                quotechar='|', quoting=csv.QUOTE_MINIMAL)
+        for scan in all_scans:
+            if '005' in scan.name:
+                filewriter.writerow([scan.name, 'inference'])
+            elif '004' in scan.name:
+                filewriter.writerow([scan.name, 'validation'])
+            else:
+                filewriter.writerow([scan.name, 'training'])
 
 
 def save_file(warped_image, scan_save_dir, file_name):
