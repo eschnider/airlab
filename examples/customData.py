@@ -75,12 +75,15 @@ class Scan:
     name = None
     path = None
     volume_path = None
+    label_path = None
     mask_path = None
     displacement_path = None
+    landmarks_path = None
 
     def __init__(self, name):
         self.name = name
         self._volume = None
+        self._label = None
         self._mask = None
         self._landmarks = None
         self._displacement = None
@@ -94,6 +97,16 @@ class Scan:
     @volume.setter
     def volume(self, value):
         self._volume = value
+
+    @property
+    def label(self):
+        if self._label is None:
+            self._label = al.Image.read(self.label_path)
+        return self._label
+
+    @label.setter
+    def label(self, value):
+        self._label = value
 
     @property
     def mask(self):
@@ -128,6 +141,7 @@ class Scan:
 
 class SkeletonScan(Scan):
     _default_volume_name = "bones.nii.gz"
+    _default_label_name = "bones.nii.gz"
     _default_mask_name = "ROI*.nii.gz"
     _default_landmarks_name = "landmark.fcsv"
     _default_displacement_name = "bspline_displacement_image_unit.vtk"
@@ -137,6 +151,7 @@ class SkeletonScan(Scan):
         self.path = scan_dir
 
         volume_name = self._default_volume_name
+        label_name = self._default_label_name
         mask_name = self._default_mask_name
         landmarks_name = self._default_landmarks_name
         displacement_name = self._default_displacement_name
@@ -144,6 +159,8 @@ class SkeletonScan(Scan):
         if file_naming is not None:
             if 'volume' in file_naming.keys():
                 volume_name = file_naming['volume']
+            if 'label' in file_naming.keys():
+                label_name = file_naming['label']
             if 'mask' in file_naming.keys():
                 mask_name = file_naming['mask']
             if 'landmarks' in file_naming.keys():
@@ -153,6 +170,8 @@ class SkeletonScan(Scan):
 
         for bone_label_file in glob.glob(os.path.join(scan_dir, volume_name)):
             self.volume_path = bone_label_file
+        for mask_label_file in glob.glob(os.path.join(scan_dir, label_name)):
+            self.label_path = mask_label_file
         for mask_file in glob.glob(os.path.join(scan_dir, mask_name)):
             self.mask_path = mask_file
         for land_mark_file in glob.glob(os.path.join(scan_dir, landmarks_name)):
