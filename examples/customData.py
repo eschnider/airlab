@@ -161,6 +161,30 @@ class SkeletonScan(Scan):
             self.displacement_path = displacement_file
 
 
+class VerseScan(Scan):
+    _default_volume_name = ".nii.gz"
+    _default_label_name = "_seg.nii.gz"
+    _default_mask_name = ""
+    _default_landmarks_name = "_ctd.json"
+    _default_displacement_name = ""
+
+    def __init__(self, scan_dir, base_name):
+        super().__init__(base_name)
+        self.path = scan_dir
+
+        volume_name = '{}{}'.format(base_name, self._default_volume_name)
+        label_name = '{}{}'.format(base_name, self._default_label_name)
+        mask_name = '{}{}'.format(base_name, self._default_mask_name)
+        landmarks_name = '{}{}'.format(base_name, self._default_landmarks_name)
+        displacement_name = '{}{}'.format(base_name, self._default_displacement_name)
+
+        self.volume_path = os.path.join(scan_dir, volume_name)
+        self.label_path = os.path.join(scan_dir, label_name)
+        self.mask_path = os.path.join(scan_dir, mask_name)
+        self.landmarks_path = os.path.join(scan_dir, landmarks_name)
+        self.displacement_path = os.path.join(scan_dir, displacement_name)
+
+
 def create_resampler(origin, spacing, size, default_value=0, interpolator=2):
     # Resample images
     # images are resampled in new domain
