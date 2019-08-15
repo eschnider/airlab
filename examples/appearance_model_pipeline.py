@@ -28,7 +28,7 @@ def main(body_part_choice='lower', reference_scan_name='001_lower'):
 
     # set the used data type
     dtype = th.float32
-    # set the device for the computaion to CPU
+    # set the device for the computation to CPU
     device = th.device("cpu")
     # In order to use a GPU uncomment the following line. The number is the device index of the used GPU
     # Here, the GPU with the index 0 is used.
@@ -45,9 +45,12 @@ def main(body_part_choice='lower', reference_scan_name='001_lower'):
         test_displacement_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/test_displacement_debug"
     else:
         data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base"
-        resampled_data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/resampled"
-        rigid_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/rigid_registered"
-        bspline_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/bspline_registered"
+        resampled_data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/resampled_{}".format(
+            body_part_choice)
+        rigid_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/rigid_registered_towards_{}".format(
+            reference_scan_name)
+        bspline_registered_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/bspline_registered_from_{}".format(
+            reference_scan_name)
         pca_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/pca"
         test_displacement_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/test_displacement"
 
@@ -158,11 +161,11 @@ def create_displacement_from_feature_vector(feature_vector, displacement_field_o
     return new_deformation
 
 
-def apply_displacement_to_image(reference_scan, displacement):
+def resize_and_apply_displacement_to_image(volume, displacement):
     upsampled_deformation_field = al.transformation.utils.upsample_displacement(displacement.image.squeeze(),
-                                                                                reference_scan.volume.size)
+                                                                                volume.size)
     def_field = th.unsqueeze(upsampled_deformation_field, 0).to(dtype=th.float32)
-    warped_image = al.transformation.utils.warp_image(reference_scan.volume, def_field, interpolation_mode='nearest',
+    warped_image = al.transformation.utils.warp_image(volume, def_field, interpolation_mode='nearest',
                                                       padding_mode='zeros')
     return warped_image
 
@@ -172,7 +175,6 @@ def sample_from_pca(pca, alphas=None):
         alphas = np.random.standard_normal(pca.n_components)
 
     new_sample = np.zeros(pca.n_features_)
-    alphas = np.random.standard_normal(pca.n_components)
     for component, eigenvalue, alpha in zip(pca.components_, pca.singular_values_, alphas):
         new_sample = new_sample + np.sqrt(eigenvalue) * alpha * component
     return new_sample
@@ -281,14 +283,17 @@ def perform_and_save_bspline_registration_on_all_scans(reference_scan, moving_sc
 
         moving_registration_data = RegistrationData(moving_image_pyramid, moving_mask_pyramid, moving_points)
 
-        bspline_registrator = BsplineRegistrator(number_of_iterations, save_intermediate_displacements=False, device=device, dtype=dtype)
+        bspline_registrator = BsplineRegistrator(number_of_iterations, save_intermediate_displacements=False,
+                                                 device=device, dtype=dtype)
         bspline_registrator.using_landmarks = using_landmarks
-        fixed_to_moving_displacement, upsampled_displacement = bspline_registrator.perform_fixed_to_moving_registration(fixed_registration_data, moving_registration_data)
+        fixed_to_moving_displacement, upsampled_displacement = bspline_registrator.perform_fixed_to_moving_registration(
+            fixed_registration_data, moving_registration_data)
 
         warped_image = al.transformation.utils.warp_image(f_image, upsampled_displacement, interpolation_mode='nearest',
                                                           padding_mode='zeros')
         # domain measures
-        displacement_image = al.create_displacement_image_from_image(fixed_to_moving_displacement, fixed_image_pyramid[-2])
+        displacement_image = al.create_displacement_image_from_image(fixed_to_moving_displacement,
+                                                                     fixed_image_pyramid[-2])
         end = time.time()
         print("Registration done in: ", end - start, " seconds")
         # in order to not invert the displacement field, the fixed points are transformed to match the moving points
