@@ -1,4 +1,6 @@
 import os
+from typing import List, Any
+
 import sys
 from examples.customRegistration import RigidRegistrator, BsplineRegistrator
 from examples.customData import RegistrationData, ScanGroup, SkeletonScan
@@ -10,18 +12,19 @@ import time
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import airlab as al
 
-def main():
 
-    IS_DEBUG =False
+def main(body_part_choice='lower', reference_scan_name='001_lower'):
+    IS_DEBUG = False
 
     DO_RESAMPLE = False
     DO_RIGID_REGISTRATION = True
     DO_BSPLINE_REGISTRATION = True
     DO_PCA = True
-    DO_TEST_REAPPLY_DISPLACEMENT = True
-    body_part_choice = 'lower'
-    reference_scan_name = '001_lower'
-    n_samples_to_be_generated = 3
+    DO_SCANS_TO_CSV = False
+    DO_TEST_REAPPLY_DISPLACEMENT = False
+
+    test_scan_name = '005_{}'.format(body_part_choice)
+    n_samples_to_be_generated = 10
 
     # set the used data type
     dtype = th.float32
@@ -74,14 +77,14 @@ def main():
                                                            device, dtype)
 
     if DO_PCA:
-        reference_scan = SkeletonScan(os.path.join(resampled_data_path, reference_scan_name))
         file_naming = {'volume': 'bspline_warped_image.nii.gz', 'displacement': 'bspline_displacement_image_unit.vtk'}
         moving_scans = collect_skeleton_scans(bspline_registered_path,
                                               reference_scan_name=None,
                                               body_part_choice=body_part_choice,
                                               file_naming=file_naming)  # type: (list[Scan])
 
-        displacement_fields = [scan.displacement for scan in moving_scans]
+        displacement_fields = [scan.displacement for scan in moving_scans if
+                               scan.name != test_scan_name]  # type: List[al.Displacement]
         X, displacement_field_original_shape = create_component_matrix_for_PCA(displacement_fields)
 
         # Compute PCA from X
@@ -94,36 +97,46 @@ def main():
 
         for n_th_sample in range(n_samples_to_be_generated):
             # sample new deformation fields from shape model
-            new_feature_vector_sample = sample_from_pca(pca)
-
+            # sample up to six standard deviations away from the mean)
+            alphas_for_sampling = np.random.uniform(-6, 6, pca.n_components)
+            new_feature_vector_sample = sample_from_pca(pca, alphas=alphas_for_sampling)
             # reshape the newly sampled deformation field
             new_displacement = create_displacement_from_feature_vector(new_feature_vector_sample,
-                                                                   displacement_field_original_shape, displacement_fields)
+                                                                       displacement_field_original_shape,
+                                                                       displacement_fields)
 
-            warped_image = apply_displacement_to_image(reference_scan, new_displacement)
-
-            scan_save_dir = pca_path
-            file_name = 'sample_{}.nii.gz'.format(n_th_sample)
+            scan_save_dir = os.path.join(pca_path, '{}_pca_{}'.format(reference_scan_name, n_th_sample))
+            # create new bones scan
+            file_type = 'bones.nii.gz'
+            file_naming = {'volume': file_type}
+            reference_scan = SkeletonScan(os.path.join(data_path, reference_scan_name), file_naming=file_naming)
+            warped_image = resize_and_apply_displacement_to_image(reference_scan.volume, new_displacement)
+            file_name = file_type
             save_file(warped_image, scan_save_dir, file_name)
+            # create new CT scan:
+            file_type = 'volume.nii.gz'
+            file_naming = {'volume': file_type}
+            reference_scan_ct = SkeletonScan(os.path.join(data_path, reference_scan_name), file_naming=file_naming)
+            warped_image_ct = resize_and_apply_displacement_to_image(reference_scan_ct.volume, new_displacement)
+            file_name_ct = file_type
+            save_file(warped_image_ct, scan_save_dir, file_name_ct)
 
             print("New sample saved")
 
         print("=================================================================")
         print("All new samples generated and saved")
 
-
     if DO_TEST_REAPPLY_DISPLACEMENT:
-
         reference_scan = SkeletonScan(os.path.join(resampled_data_path, reference_scan_name))
         file_naming = {'volume': 'bspline_warped_image.nii.gz',
                        'displacement': 'bspline_displacement_image_unit.vtk'}
         moving_scans = collect_skeleton_scans(bspline_registered_path,
                                               reference_scan_name=None,
                                               body_part_choice=body_part_choice,
-                                              file_naming=file_naming)  # type: (list[Scan])
+                                              file_naming=file_naming)  # type: (list[SkeletonScan])
 
         test_displacement = moving_scans[0].displacement
-        test_image_warped = apply_displacement_to_image(reference_scan, test_displacement)
+        test_image_warped = resize_and_apply_displacement_to_image(reference_scan.volume, test_displacement)
         scan_save_dir = test_displacement_path
         file_name = 'test_{}.nii.gz'.format(moving_scans[0].name)
         save_file(test_image_warped, scan_save_dir, file_name)
@@ -154,7 +167,10 @@ def apply_displacement_to_image(reference_scan, displacement):
     return warped_image
 
 
-def sample_from_pca(pca):
+def sample_from_pca(pca, alphas=None):
+    if alphas is None:
+        alphas = np.random.standard_normal(pca.n_components)
+
     new_sample = np.zeros(pca.n_features_)
     alphas = np.random.standard_normal(pca.n_components)
     for component, eigenvalue, alpha in zip(pca.components_, pca.singular_values_, alphas):
@@ -214,8 +230,8 @@ def resample_to_common_domain(data_path, save_path, body_part_choice):
     # bring all files to a joint image domain and save to disk
     scan_group = ScanGroup(lower_limb_scans)
     scan_group.compute_common_domain()
-    scan_group.resample_volumetric_data_inplace(file_type='volume', default_value=0, interpolator=1)
-    scan_group.resample_volumetric_data_inplace(file_type='mask', default_value=0, interpolator=1)
+    scan_group.resample_inplace(file_type='volume', default_value=0, interpolator=1)
+    scan_group.resample_inplace(file_type='mask', default_value=0, interpolator=1)
     scan_group.save_to_disk(save_path, exist_ok=False)
 
 
@@ -371,4 +387,11 @@ def perform_and_save_rigid_registration_on_all_scans(reference_scan, moving_scan
 
 
 if __name__ == "__main__":
-    main()
+    # main(body_part_choice='lower', reference_scan_name='001_lower')
+    # main(body_part_choice='lower', reference_scan_name='002_lower')
+    # main(body_part_choice='lower', reference_scan_name='003_lower')
+    main(body_part_choice='lower', reference_scan_name='001_lower')
+    main(body_part_choice='lower', reference_scan_name='002_lower')
+    main(body_part_choice='lower', reference_scan_name='003_lower')
+
+    # main(body_part_choice='all')
