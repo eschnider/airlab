@@ -104,7 +104,7 @@ def remove_bed_filter(image, cropping=True):
     houndsfield_max = 3071
     houndsfield_default = -1024
 
-    radius_opening = 3
+    radius_opening = 4
     radius_closing = 40
 
 

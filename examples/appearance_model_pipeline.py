@@ -147,35 +147,40 @@ def main(body_part_choice='lower', reference_scan_name='001_lower'):
         file_name = 'test_{}.nii.gz'.format(moving_scans[0].name)
         save_file(test_image_warped, scan_save_dir, file_name)
 
-    if DO_SCANS_TO_CSV:
-        run_type = 'base'
-        include_pca_scans = True
-        include_verse_scans = True
-        volume_type = 'no_bed_volume'
-        label_type = 'binary_bones'
-        paths_to_include = [data_path]
-        if include_pca_scans is True:
-            paths_to_include.append(pca_path)
-            run_type = '{}_withPCA'.format(run_type)
-        verse_subpaths_to_include = ['training_phase_1_release', 'training_phase_2_release', 'training_phase_3_release']
-        if include_verse_scans:
-            run_type = '{}_withVerse'.format(run_type)
 
-        all_scans = []  # type: (list[SkeletonScan])
-        file_naming = {'volume': '{}.nii.gz'.format(volume_type),
-                       'label': '{}.nii.gz'.format(label_type)}
+def scans_to_csv(body_part_choice, include_pca_scans, include_verse_scans=False):
+    csv_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/csv_files"
+    pca_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/pca"
+    data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base_halfres"
+    verse_path = "/home/eva/PhD/Data/VerSe2019"
 
-        if body_part_choice == 'all':
-            body_part_choices = ['lower', 'upper']
-        else:
-            body_part_choices = [body_part_choice]
-        for path in paths_to_include:
-            for body_part in body_part_choices:
-                collected_scans = collect_skeleton_scans(path,
-                                                         reference_scan_name=None,
-                                                         body_part_choice=body_part,
-                                                         file_naming=file_naming)  # type: (list[SkeletonScan])
-                all_scans = all_scans + collected_scans
+    run_type = 'base'
+
+    volume_type = 'volume'
+    label_type = 'binary_bones'
+    paths_to_include = [data_path]
+    if include_pca_scans is True:
+        paths_to_include.append(pca_path)
+        run_type = '{}_pca'.format(run_type)
+    verse_subpaths_to_include = ['training_phase_1_release', 'training_phase_2_release', 'training_phase_3_release']
+    if include_verse_scans:
+        run_type = '{}_withVerse'.format(run_type)
+
+    all_scans = []  # type: (list[SkeletonScan])
+    file_naming = {'volume': '{}.nii.gz'.format(volume_type),
+                   'label': '{}.nii.gz'.format(label_type)}
+
+    if body_part_choice == 'all':
+        body_part_choices = ['lower', 'upper']
+    else:
+        body_part_choices = [body_part_choice]
+    for path in paths_to_include:
+        for body_part in body_part_choices:
+            collected_scans = collect_skeleton_scans(path,
+                                                     reference_scan_name=None,
+                                                     body_part_choice=body_part,
+                                                     file_naming=file_naming)  # type: (list[SkeletonScan])
+            all_scans = all_scans + collected_scans
 
     if include_verse_scans:
         file_naming_verse = None
@@ -199,8 +204,8 @@ def main(body_part_choice='lower', reference_scan_name='001_lower'):
             scan.name = scan_name
         all_file_names.append(scan.name)
 
-        csv_path = os.path.join(csv_path, run_type)
-        write_nifty_csvs(all_scans, csv_path, volume_type, label_type)
+    csv_path = os.path.join(csv_path, run_type)
+    write_nifty_csvs(all_scans, csv_path, volume_type, label_type)
 
 
 def write_nifty_csvs(all_scans, csv_path, volume_type, label_type):
