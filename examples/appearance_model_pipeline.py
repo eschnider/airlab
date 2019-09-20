@@ -177,24 +177,27 @@ def main(body_part_choice='lower', reference_scan_name='001_lower'):
                                                          file_naming=file_naming)  # type: (list[SkeletonScan])
                 all_scans = all_scans + collected_scans
 
-        if include_verse_scans:
-            for subpath_name in verse_subpaths_to_include:
-                subpath = os.path.join(verse_path, subpath_name)
-                verse_scans = collect_verse_scans(subpath)
-                all_scans = all_scans + verse_scans
+    if include_verse_scans:
+        file_naming_verse = None
+        if label_type == 'binary_bones':
+            file_naming_verse = {'label': '_seg_binary.nii.gz'}
+        for subpath_name in verse_subpaths_to_include:
+            subpath = os.path.join(verse_path, subpath_name)
+            verse_scans = collect_verse_scans(subpath, file_naming=file_naming_verse)
+            all_scans = all_scans + verse_scans
 
-        all_file_names = []
+    all_file_names = []
 
-        for scan in all_scans:
-            i = 0
+    for scan in all_scans:
+        i = 0
+        scan_name = scan.name
+        while scan_name in all_file_names:
             scan_name = scan.name
-            while scan_name in all_file_names:
-                scan_name = scan.name
-                scan_name = '{}_{}'.format(scan_name, i)
-                i = i + 1
-            if i > 0:
-                scan.name = scan_name
-            all_file_names.append(scan.name)
+            scan_name = '{}_{}'.format(scan_name, i)
+            i = i + 1
+        if i > 0:
+            scan.name = scan_name
+        all_file_names.append(scan.name)
 
         csv_path = os.path.join(csv_path, run_type)
         write_nifty_csvs(all_scans, csv_path, volume_type, label_type)
@@ -330,7 +333,7 @@ def collect_verse_scans(data_path, reference_scan_name=None, body_part_choice=No
         base_name = first_part.split('_')[0]
         if base_name not in all_base_names:
             all_base_names.append(base_name)
-            current_scan = VerseScan(data_path, base_name)
+            current_scan = VerseScan(data_path, base_name, file_naming)
             if reference_scan_name is not None and current_scan.name == reference_scan_name:
                 reference_scan = current_scan
             else:

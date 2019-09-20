@@ -187,7 +187,7 @@ class VerseScan(Scan):
     _default_landmarks_name = "_ctd.json"
     _default_displacement_name = ""
 
-    def __init__(self, scan_dir, base_name):
+    def __init__(self, scan_dir, base_name, file_naming=None):
         super().__init__(base_name)
         self.path = scan_dir
 
@@ -196,6 +196,18 @@ class VerseScan(Scan):
         mask_name = '{}{}'.format(base_name, self._default_mask_name)
         landmarks_name = '{}{}'.format(base_name, self._default_landmarks_name)
         displacement_name = '{}{}'.format(base_name, self._default_displacement_name)
+
+        if file_naming is not None:
+            if 'volume' in file_naming.keys():
+                volume_name = '{}{}'.format(base_name, file_naming['volume'])
+            if 'label' in file_naming.keys():
+                label_name = '{}{}'.format(base_name, file_naming['label'])
+            if 'mask' in file_naming.keys():
+                mask_name = '{}{}'.format(base_name, file_naming['mask'])
+            if 'landmarks' in file_naming.keys():
+                landmarks_name = '{}{}'.format(base_name, file_naming['landmarks'])
+            if 'displacement' in file_naming.keys():
+                displacement_name = '{}{}'.format(base_name, file_naming['displacement'])
 
         self.volume_path = os.path.join(scan_dir, volume_name)
         self.label_path = os.path.join(scan_dir, label_name)
