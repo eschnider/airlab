@@ -3,7 +3,8 @@ from typing import List, Any
 
 import sys
 from examples.customRegistration import RigidRegistrator, BsplineRegistrator
-from examples.customData import RegistrationData, ScanGroup, SkeletonScan, VerseScan
+from examples.customData import RegistrationData, ScanGroup, SkeletonScan, collect_skeleton_scans, \
+    collect_verse_scans
 import numpy as np
 from sklearn.decomposition import PCA
 import torch as th
@@ -291,66 +292,6 @@ def create_component_matrix_for_PCA(displacement_fields):
     return X, displacement_field_original_shape
 
 
-def collect_skeleton_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
-    # collect all dirs in data path
-    scan_dirs = []
-    for scan_dir_name in os.listdir(data_path):
-        scan_dir_name = os.fsdecode(scan_dir_name)
-        scan_dir = os.path.join(data_path, scan_dir_name)
-        scan_dirs.append(scan_dir)
-
-    # only return scans with a given pattern eg. lower, upper in their name
-    reference_scan = None
-    moving_scans = []
-
-    for scan_dir in scan_dirs:
-        if body_part_choice is None or body_part_choice in scan_dir:
-            current_scan = SkeletonScan(scan_dir, file_naming)
-            if reference_scan_name is not None and current_scan.name == reference_scan_name:
-                reference_scan = current_scan
-            else:
-                moving_scans.append(current_scan)
-
-    # return one list with all N chosen scans, or split in 1 reference_scan and N-1 moving_scans
-    if reference_scan is not None:
-        return moving_scans, reference_scan
-    else:
-        return moving_scans
-
-
-def collect_verse_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
-    # collect all dirs in data path
-    scan_dirs = []
-    for scan_dir_name in os.listdir(data_path):
-        scan_dir_name = os.fsdecode(scan_dir_name)
-        scan_dir = os.path.join(data_path, scan_dir_name)
-        scan_dirs.append(scan_dir)
-
-    # only return scans with a given pattern eg. lower, upper in their name
-    reference_scan = None
-    moving_scans = []
-
-    all_base_names = []
-    for scan_dir in scan_dirs:
-        file_base_name = os.path.basename(scan_dir)
-        file_name_parts = file_base_name.split('.')
-        first_part = file_name_parts[0]
-        base_name = first_part.split('_')[0]
-        if base_name not in all_base_names:
-            all_base_names.append(base_name)
-            current_scan = VerseScan(data_path, base_name, file_naming)
-            if reference_scan_name is not None and current_scan.name == reference_scan_name:
-                reference_scan = current_scan
-            else:
-                moving_scans.append(current_scan)
-
-    # return one list with all N chosen scans, or split in 1 reference_scan and N-1 moving_scans
-    if reference_scan is not None:
-        return moving_scans, reference_scan
-    else:
-        return moving_scans
-
-
 def resample_to_common_domain(data_path, save_path, body_part_choice):
     lower_limb_scans = collect_skeleton_scans(data_path, reference_scan_name=None, body_part_choice=body_part_choice)
     moving_images = []
@@ -359,8 +300,8 @@ def resample_to_common_domain(data_path, save_path, body_part_choice):
     # bring all files to a joint image domain and save to disk
     scan_group = ScanGroup(lower_limb_scans)
     scan_group.compute_common_domain()
-    scan_group.resample_inplace(file_type='volume', default_value=0, interpolator=1)
-    scan_group.resample_inplace(file_type='mask', default_value=0, interpolator=1)
+    scan_group.resample_common_inplace(file_type='volume', default_value=0, interpolator=1)
+    scan_group.resample_common_inplace(file_type='mask', default_value=0, interpolator=1)
     scan_group.save_to_disk(save_path, exist_ok=False)
 
 

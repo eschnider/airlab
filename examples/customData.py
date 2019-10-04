@@ -1,6 +1,7 @@
 import glob
 import multiprocessing as mp
 import os
+import numpy as np
 
 import SimpleITK as sitk
 
@@ -41,7 +42,7 @@ class ScanGroup:
         self.common_spacing, \
         self.common_size = al.utils.domain.find_common_domain(reference_image, moving_images)
 
-    def resample_inplace(self, file_type='all', default_value=0.0, interpolator=2):
+    def resample_common_inplace(self, file_type='all', default_value=0.0, interpolator=2):
 
         if self.common_extent is None or self.common_spacing is None or self.common_size is None:
             self.compute_common_domain()
@@ -63,12 +64,7 @@ class ScanGroup:
             while os.path.exists(save_dir):
                 save_dir = "{}_Copy".format(save_dir)
         for scan in self.scans:
-            scan_save_path = os.path.join(save_dir, scan.name)
-            if not os.path.exists(scan_save_path):
-                os.makedirs(scan_save_path, exist_ok=False)
-            volume_file_path = os.path.join(scan_save_path, os.path.basename(scan.volume_path))
-            scan.volume.write(volume_file_path)
-            scan.mask.write(os.path.join(scan_save_path, os.path.basename(scan.mask_path)))
+            scan.save_scan_to(save_dir, exist_ok=True)
 
 
 class Scan:
@@ -137,6 +133,65 @@ class Scan:
     @displacement.setter
     def displacement(self, value):
         self._displacement = value
+
+    def find_domain_for(self, volume, spacing=None, size=None):
+
+        origin = volume.origin
+        extent = np.array(volume.origin) + (np.array(volume.size) - 1) * np.array(
+            volume.spacing)
+
+        if spacing is not None:
+            size = np.ceil(((extent - origin) / spacing) + 1).astype(int)
+        elif size is not None:
+            spacing = (extent - origin) / (size - 1)
+
+        return origin, extent, spacing, size
+
+    def resample_to(self, reference_scan=None, spacing=None, size=None, file_type='all', default_value=0.0, interpolator=2):
+        if reference_scan is not None:
+            moving_images = []
+            if (self.volume is not None):
+                moving_images.append(self.volume)
+            elif self.label is not None:
+                moving_images.append(self.label)
+            if reference_scan.volume is not None:
+                reference_image = reference_scan.volume
+            elif reference_scan.label is not None:
+                reference_image = reference_scan.label
+            origin, extent, spacing, size = al.utils.domain.find_common_domain(reference_image, moving_images)
+        else:
+            origin, extent, spacing, size = self.find_domain_for(self.volume, spacing=spacing, size=size)
+
+        resampler = create_resampler(origin, spacing, size, default_value,
+                                     interpolator)
+
+        if file_type == 'volume' or file_type == 'all':
+            self.volume = Image(resampler.Execute(self.volume.itk()))
+        if file_type == 'mask' or file_type == 'all':
+            self.mask = Image(resampler.Execute(self.mask.itk()))
+        if file_type == 'label' or file_type == 'all':
+            self.label = Image(resampler.Execute(self.label.itk()))
+
+
+    def save_scan_to(self, save_dir, exist_ok=False):
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir, exist_ok=False)
+        elif not exist_ok:
+            while os.path.exists(save_dir):
+                save_dir = "{}_Copy".format(save_dir)
+
+        scan_save_path = os.path.join(save_dir, self.name)
+        if not os.path.exists(scan_save_path):
+            os.makedirs(scan_save_path, exist_ok=False)
+        if os.path.isfile(self.volume_path):
+            volume_file_path = os.path.join(scan_save_path, os.path.basename(self.volume_path))
+            self.volume.write(volume_file_path)
+        if os.path.isfile(self.mask_path):
+            mask_file_path = os.path.join(scan_save_path, os.path.basename(self.mask_path))
+            self.mask.write(mask_file_path)
+        if os.path.isfile(self.label_path):
+            label_file_path = os.path.join(scan_save_path, os.path.basename(self.label_path))
+            self.label.write(label_file_path)
 
 
 class SkeletonScan(Scan):
@@ -233,3 +288,62 @@ def create_resampler(origin, spacing, size, default_value=0, interpolator=2):
     resampler.SetNumberOfThreads(mp.cpu_count())
 
     return resampler
+
+def collect_skeleton_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
+    # collect all dirs in data path
+    scan_dirs = []
+    for scan_dir_name in os.listdir(data_path):
+        scan_dir_name = os.fsdecode(scan_dir_name)
+        scan_dir = os.path.join(data_path, scan_dir_name)
+        scan_dirs.append(scan_dir)
+
+    # only return scans with a given pattern eg. lower, upper in their name
+    reference_scan = None
+    moving_scans = []
+
+    for scan_dir in scan_dirs:
+        if body_part_choice is None or body_part_choice in scan_dir:
+            current_scan = SkeletonScan(scan_dir, file_naming)
+            if reference_scan_name is not None and current_scan.name == reference_scan_name:
+                reference_scan = current_scan
+            else:
+                moving_scans.append(current_scan)
+
+    # return one list with all N chosen scans, or split in 1 reference_scan and N-1 moving_scans
+    if reference_scan is not None:
+        return moving_scans, reference_scan
+    else:
+        return moving_scans
+
+
+def collect_verse_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
+    # collect all dirs in data path
+    scan_dirs = []
+    for scan_dir_name in os.listdir(data_path):
+        scan_dir_name = os.fsdecode(scan_dir_name)
+        scan_dir = os.path.join(data_path, scan_dir_name)
+        scan_dirs.append(scan_dir)
+
+    # only return scans with a given pattern eg. lower, upper in their name
+    reference_scan = None
+    moving_scans = []
+
+    all_base_names = []
+    for scan_dir in scan_dirs:
+        file_base_name = os.path.basename(scan_dir)
+        file_name_parts = file_base_name.split('.')
+        first_part = file_name_parts[0]
+        base_name = first_part.split('_')[0]
+        if base_name not in all_base_names:
+            all_base_names.append(base_name)
+            current_scan = VerseScan(data_path, base_name, file_naming)
+            if reference_scan_name is not None and current_scan.name == reference_scan_name:
+                reference_scan = current_scan
+            else:
+                moving_scans.append(current_scan)
+
+    # return one list with all N chosen scans, or split in 1 reference_scan and N-1 moving_scans
+    if reference_scan is not None:
+        return moving_scans, reference_scan
+    else:
+        return moving_scans
