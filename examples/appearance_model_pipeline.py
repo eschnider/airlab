@@ -1,15 +1,17 @@
 import os
-from typing import List, Any
+from typing import List
 
 import sys
 from examples.customRegistration import RigidRegistrator, BsplineRegistrator
-from examples.customData import RegistrationData, ScanGroup, SkeletonScan, collect_skeleton_scans, \
+from examples.customData import RegistrationData, SkeletonScan, collect_skeleton_scans, \
     collect_verse_scans
 import numpy as np
 from sklearn.decomposition import PCA
 import torch as th
 import time
 import csv
+
+from examples.data_preprocessing import resample_to_common_domain
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import airlab as al
@@ -19,8 +21,8 @@ def main(body_part_choice='lower', reference_scan_name='001_lower'):
     IS_DEBUG = False
 
     DO_RESAMPLE = False
-    DO_RIGID_REGISTRATION = True
-    DO_BSPLINE_REGISTRATION = True
+    DO_RIGID_REGISTRATION = False
+    DO_BSPLINE_REGISTRATION = False
     DO_PCA = True
     DO_SCANS_TO_CSV = False
     DO_TEST_REAPPLY_DISPLACEMENT = False
@@ -59,7 +61,7 @@ def main(body_part_choice='lower', reference_scan_name='001_lower'):
         verse_path = "/home/eva/PhD/Data/VerSe2019"
 
     if DO_RESAMPLE:
-        resample_to_common_domain(data_path, resampled_data_path, body_part_choice)
+        resample_to_common_domain(data_path, resampled_data_path, body_part_choice, 'NIFTY')
 
     # rigid registration towards the mean scan (this one is the moving image)
 
@@ -152,7 +154,7 @@ def main(body_part_choice='lower', reference_scan_name='001_lower'):
 def scans_to_csv(body_part_choice, include_pca_scans, include_verse_scans=False):
     csv_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/csv_files"
     pca_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/pca"
-    data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base_halfres"
+    data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base"
     verse_path = "/home/eva/PhD/Data/VerSe2019"
 
     run_type = 'base'
@@ -290,19 +292,6 @@ def create_component_matrix_for_PCA(displacement_fields):
         X[index, :] = displacement_field_reshaped
     displacement_field_original_shape = displacement_field_array.shape
     return X, displacement_field_original_shape
-
-
-def resample_to_common_domain(data_path, save_path, body_part_choice):
-    lower_limb_scans = collect_skeleton_scans(data_path, reference_scan_name=None, body_part_choice=body_part_choice)
-    moving_images = []
-    for scan in lower_limb_scans:
-        moving_images.append(scan.volume)
-    # bring all files to a joint image domain and save to disk
-    scan_group = ScanGroup(lower_limb_scans)
-    scan_group.compute_common_domain()
-    scan_group.resample_common_inplace(file_type='volume', default_value=0, interpolator=1)
-    scan_group.resample_common_inplace(file_type='mask', default_value=0, interpolator=1)
-    scan_group.save_to_disk(save_path, exist_ok=False)
 
 
 def perform_and_save_bspline_registration_on_all_scans(reference_scan, moving_scans, save_dir, device=th.device("cpu"),
@@ -460,11 +449,15 @@ def perform_and_save_rigid_registration_on_all_scans(reference_scan, moving_scan
 
 
 if __name__ == "__main__":
+    # main(body_part_choice='upper', reference_scan_name='001_upper')
+    # main(body_part_choice='upper', reference_scan_name='002_upper')
+    # main(body_part_choice='upper', reference_scan_name='003_upper')
     # main(body_part_choice='lower', reference_scan_name='001_lower')
     # main(body_part_choice='lower', reference_scan_name='002_lower')
     # main(body_part_choice='lower', reference_scan_name='003_lower')
-    main(body_part_choice='lower', reference_scan_name='001_lower')
-    main(body_part_choice='lower', reference_scan_name='002_lower')
-    main(body_part_choice='lower', reference_scan_name='003_lower')
 
-    # main(body_part_choice='all')
+
+    include_pca_scans = False
+    include_verse_scans = False
+    body_part_choice = 'all'
+    scans_to_csv(body_part_choice, include_pca_scans, include_verse_scans)

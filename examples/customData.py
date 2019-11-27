@@ -47,8 +47,8 @@ class ScanGroup:
         if self.common_extent is None or self.common_spacing is None or self.common_size is None:
             self.compute_common_domain()
 
-        resampler = create_resampler(self.common_origin, self.common_spacing, self.common_size, default_value,
-                                     interpolator)
+        resampler = create_resampler(self.common_origin, self.common_spacing, self.common_size,
+                                     default_value=default_value, interpolator=interpolator)
         for scan in self.scans:
             if file_type == 'all' or file_type == 'volume':
                 scan.volume = Image(resampler.Execute(scan.volume.itk()))
@@ -144,10 +144,12 @@ class Scan:
             size = np.ceil(((extent - origin) / spacing) + 1).astype(int)
         elif size is not None:
             spacing = (extent - origin) / (size - 1)
+        direction = volume.direction
 
-        return origin, extent, spacing, size
+        return origin, extent, spacing, size, direction
 
-    def resample_to(self, reference_scan=None, spacing=None, size=None, file_type='all', default_value=0.0, interpolator=2):
+    def resample_to(self, reference_scan=None, spacing=None, size=None, file_type='all', default_value=0.0,
+                    interpolator=2):
         if reference_scan is not None:
             moving_images = []
             if (self.volume is not None):
@@ -160,18 +162,39 @@ class Scan:
                 reference_image = reference_scan.label
             origin, extent, spacing, size = al.utils.domain.find_common_domain(reference_image, moving_images)
         else:
-            origin, extent, spacing, size = self.find_domain_for(self.volume, spacing=spacing, size=size)
+            origin, extent, spacing, size, direction = self.find_domain_for(self.volume, spacing=spacing, size=size)
 
-        resampler = create_resampler(origin, spacing, size, default_value,
-                                     interpolator)
+        resampler = create_resampler(origin, spacing, size, direction=direction,
+                                     default_value=default_value, interpolator=interpolator)
+        self.apply_sitk_filter(resampler, file_type)
 
+    def apply_sitk_filter(self, sitk_filter, file_type):
         if file_type == 'volume' or file_type == 'all':
-            self.volume = Image(resampler.Execute(self.volume.itk()))
+            self.volume = Image(sitk_filter.Execute(self.volume.itk()))
         if file_type == 'mask' or file_type == 'all':
-            self.mask = Image(resampler.Execute(self.mask.itk()))
+            self.mask = Image(sitk_filter.Execute(self.mask.itk()))
         if file_type == 'label' or file_type == 'all':
-            self.label = Image(resampler.Execute(self.label.itk()))
+            self.label = Image(sitk_filter.Execute(self.label.itk()))
 
+    def flip(self, flip_axes, file_type='all'):
+        flip_filter = sitk.FlipImageFilter()
+        flip_filter.SetFlipAxes(flip_axes)
+        flip_filter.FlipAboutOriginOff()  # flip around the center of the axis.
+        self.apply_sitk_filter(flip_filter, file_type)
+
+    def shrink(self, shrink_factor, file_type='all'):
+        shrink_filter = sitk.ShrinkImageFilter()
+        shrink_filter.SetShrinkFactor(shrink_factor)
+        self.apply_sitk_filter(shrink_filter, file_type)
+
+    def add_padding(self, padding_per_dimension, filling_constant, file_type='all'):
+        pad_filter = sitk.ConstantPadImageFilter()
+        padding_upper = list(np.ceil(np.array(padding_per_dimension)/2))
+        padding_lower = list(np.floor(np.array(padding_per_dimension)/2))
+        pad_filter.SetPadLowerBound(sitk.VectorUInt32([int(i) for i in padding_lower]))
+        pad_filter.SetPadUpperBound(sitk.VectorUInt32([int(i) for i in padding_upper]))
+        pad_filter.SetConstant(filling_constant)
+        self.apply_sitk_filter(pad_filter, file_type)
 
     def save_scan_to(self, save_dir, exist_ok=False):
         if not os.path.exists(save_dir):
@@ -195,7 +218,7 @@ class Scan:
 
 
 class SkeletonScan(Scan):
-    _default_volume_name = "bones.nii.gz"
+    _default_volume_name = "volume.nii.gz"
     _default_label_name = "bones.nii.gz"
     _default_mask_name = "ROI*.nii.gz"
     _default_landmarks_name = "landmark.fcsv"
@@ -271,7 +294,7 @@ class VerseScan(Scan):
         self.displacement_path = os.path.join(scan_dir, displacement_name)
 
 
-def create_resampler(origin, spacing, size, default_value=0, interpolator=2):
+def create_resampler(origin, spacing, size, direction=None, default_value=0, interpolator=2):
     # Resample images
     # images are resampled in new domain
     # the default value for resampling is set to a predefined value
@@ -287,7 +310,11 @@ def create_resampler(origin, spacing, size, default_value=0, interpolator=2):
     resampler.SetInterpolator(interpolator)
     resampler.SetNumberOfThreads(mp.cpu_count())
 
+    if direction is not None:
+        resampler.SetOutputDirection(direction)
+
     return resampler
+
 
 def collect_skeleton_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
     # collect all dirs in data path
@@ -318,25 +345,30 @@ def collect_skeleton_scans(data_path, reference_scan_name=None, body_part_choice
 
 def collect_verse_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
     # collect all dirs in data path
-    scan_dirs = []
+    scan_files = []
     for scan_dir_name in os.listdir(data_path):
         scan_dir_name = os.fsdecode(scan_dir_name)
-        scan_dir = os.path.join(data_path, scan_dir_name)
-        scan_dirs.append(scan_dir)
+        data_path_child = os.path.join(data_path, scan_dir_name)
+        if os.path.isfile(data_path_child):
+            scan_files.append(data_path_child)
+        elif os.path.isdir(data_path_child):
+            for sub_sub_dir in os.listdir(data_path_child):
+                sub_sub_dir_path=os.path.join(data_path_child,sub_sub_dir)
+                if os.path.isfile(sub_sub_dir_path):
+                    scan_files.append(sub_sub_dir_path)
 
-    # only return scans with a given pattern eg. lower, upper in their name
     reference_scan = None
     moving_scans = []
 
     all_base_names = []
-    for scan_dir in scan_dirs:
-        file_base_name = os.path.basename(scan_dir)
+    for scan_file in scan_files:
+        file_base_name = os.path.basename(scan_file)
         file_name_parts = file_base_name.split('.')
         first_part = file_name_parts[0]
         base_name = first_part.split('_')[0]
         if base_name not in all_base_names:
             all_base_names.append(base_name)
-            current_scan = VerseScan(data_path, base_name, file_naming)
+            current_scan = VerseScan(os.path.dirname(scan_file), base_name, file_naming)
             if reference_scan_name is not None and current_scan.name == reference_scan_name:
                 reference_scan = current_scan
             else:

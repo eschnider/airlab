@@ -63,6 +63,9 @@ class Image:
         self.size = image_size
         self.spacing = image_spacing
         self.origin = image_origin
+        self.direction = np.array([1,0,0,
+                                   0,1,0,
+                                   0,0,1], dtype=np.double)
         self.dtype = self.image.dtype
         self.device = self.image.device
         self.ndim = len(self.image.squeeze().shape) # take only non-empty dimensions to count space dimensions
@@ -84,6 +87,7 @@ class Image:
             self.size = sitk_image.GetSize()
             self.spacing = sitk_image.GetSpacing()
             self.origin = sitk_image.GetOrigin()
+            self.direction = sitk_image.GetDirection()
 
             if not dtype is None:
                 self.to(dtype, device)
@@ -124,6 +128,7 @@ class Image:
         itk_image = sitk.GetImageFromArray(image.image.numpy())
         itk_image.SetSpacing(spacing=self.spacing)
         itk_image.SetOrigin(origin=self.origin)
+        itk_image.SetDirection(direction=self.direction)
         return itk_image
 
 
