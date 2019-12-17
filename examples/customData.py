@@ -182,6 +182,11 @@ class Scan:
         flip_filter.FlipAboutOriginOff()  # flip around the center of the axis.
         self.apply_sitk_filter(flip_filter, file_type)
 
+    def permute_axes(self, new_order, file_type='all'):
+        permute_axes_filter = sitk.PermuteAxesImageFilter()
+        permute_axes_filter.SetOrder(new_order)
+        self.apply_sitk_filter(permute_axes_filter, file_type)
+
     def shrink(self, shrink_factor, file_type='all'):
         shrink_filter = sitk.ShrinkImageFilter()
         shrink_filter.SetShrinkFactor(shrink_factor)
