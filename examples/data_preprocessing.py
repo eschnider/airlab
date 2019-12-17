@@ -84,6 +84,16 @@ def relabel_scan_inplace(scan, current_label_dict, target_label_dict):
     tensor_image = th.from_numpy(label_file).unsqueeze(0).unsqueeze(0)
     scan.label.image = tensor_image
 
+def flip_all(data_path, save_path, scan_type, flip_axes, body_part_choice=None):
+    all_chosen_scans = get_all_scans(data_path, scan_type, body_part_choice)
+
+    if not os.path.exists(save_path):
+        os.makedirs(save_path, exist_ok=False)
+
+    for scan in all_chosen_scans:
+        scan.flip(flip_axes)
+        scan.save_scan_to(save_path, exist_ok=True)
+
 
 def flip_left_right(data_path, save_path, scan_type, colormap=None, body_part_choice=None):
     all_chosen_scans = get_all_scans(data_path, scan_type, body_part_choice)
@@ -105,6 +115,25 @@ def flip_left_right(data_path, save_path, scan_type, colormap=None, body_part_ch
             relabel_scan_inplace(scan, original_label_dict, flipped_label_dict)
             scan.flip(flip_axis_left_right)
             scan.save_scan_to(save_path, exist_ok=True)
+
+def flip_front_back(data_path, save_path, scan_type, body_part_choice=None):
+    flip_all(data_path, save_path, scan_type, flip_axes=[False, True, False], body_part_choice=body_part_choice)
+
+def flip_all_dimensions(data_path, save_path, scan_type, body_part_choice=None):
+    flip_all(data_path, save_path, scan_type, flip_axes=[True, True, True], body_part_choice=body_part_choice)
+
+def permute_axes(data_path, save_path, scan_type, body_part_choice=None):
+    all_chosen_scans = get_all_scans(data_path, scan_type, body_part_choice)
+    new_order = [2,0,1]
+
+    if not os.path.exists(save_path):
+        os.makedirs(save_path, exist_ok=False)
+
+    if scan_type == 'VERSE':
+        for scan in all_chosen_scans:
+            scan.permute_axes(new_order)
+            scan.save_scan_to(save_path, exist_ok=True)
+
 
 
 def create_flipped_label_dict(original_label_dict):
@@ -240,12 +269,15 @@ if __name__ == '__main__':
     print('flipped')
     # print_all_orientations(nifty_flipped, 'NIFTY')
 
-    reorient_path = '/home/eva/PhD/Data/VerSe2019_reorient'
-    reorient_res_path = '/home/eva/PhD/Data/VerSe2019_reorient_res'
-    # change_all_orientations_to_canonical(dummy_path, reorient_path, 'VERSE')
-    # resample_to_common_spacing(reorient_path, reorient_res_path, scan_type=scan_type,  body_part_choice=None, spacing=[1,1,1])
-    # flip_left_right(reorient_path, reorient_res_path, scan_type='VERSE')
-    print_all_orientations(reorient_res_path, scan_type='VERSE')
+    permute_path_out = '/home/eva/PhD/Data/VerSe2019/Processed/padded_permuted'
+    # permute_axes(padded_path, permute_path_out, 'VERSE')
+
+    flipped_all_path='/home/eva/PhD/Data/VerSe2019/Processed/padded_permuted_flipped'
+    # flip_all_dimensions(permute_path_out, flipped_all_path, 'VERSE')
+    flipped_le_ri_path = '/home/eva/PhD/Data/VerSe2019/Processed/padded_permuted_flipped_le_ri'
+    flip_left_right(flipped_all_path, flipped_le_ri_path, scan_type='VERSE')
+
+    # print_all_orientations(reorient_res_path, scan_type='VERSE')
     reorient_path2 = '/home/eva/PhD/Data/VerSe2019_reorient_res2'
     # change_all_orientations_to_canonical(reorient_res_path, reorient_path2, 'VERSE')
 
