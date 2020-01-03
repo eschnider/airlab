@@ -82,7 +82,11 @@ def relabel_scan_inplace(scan, current_label_dict, target_label_dict):
     label_file = scan.label.numpy()
     label_original = label_file.copy()
     for name, label in current_label_dict.items():
-        label_file[label_original == int(label)] = target_label_dict[name.lower()]
+        if name.lower() in target_label_dict:
+            label_file[label_original == int(label)] = target_label_dict[name.lower()]
+        else:
+            if label_file[label_original == int(label)].size > 0:
+                raise Exception('could not find {} in target dict'.format(name.lower()))
     tensor_image = th.from_numpy(label_file).unsqueeze(0).unsqueeze(0)
     scan.label.image = tensor_image
 
@@ -162,7 +166,7 @@ def pad_all_to_fixed_size(data_path, save_path, scan_type, target_size, body_par
         os.makedirs(save_path, exist_ok=False)
     for scan in all_chosen_scans:
         scan_size = scan.volume.size
-        padding_to_add=[max(0, target_size[i]-scan_size[i]) for i in range(len(scan_size))]
+        padding_to_add = [max(0, target_size[i] - scan_size[i]) for i in range(len(scan_size))]
         scan.add_padding(padding_to_add, 0.0, file_type='label')
         scan.add_padding(padding_to_add, -1024.0, file_type='volume')
         scan.save_scan_to(save_path, exist_ok=True)
@@ -185,8 +189,10 @@ def change_all_orientations_to_canonical(data_path, save_path, scan_type, body_p
         canonical_img = nib.as_closest_canonical(nib_img)
         canonical_seg = nib.as_closest_canonical(nib_seg)
         print(nib.aff2axcodes(canonical_img.affine))
-        nib.save(canonical_img, os.path.join(save_path, os.path.basename(scan.volume_path)))
-        nib.save(canonical_seg, os.path.join(save_path, os.path.basename(scan.label_path)))
+        base_name_volume=os.path.basename(scan.volume_path)
+        dir_name=base_name_volume.split('.')[0]
+        nib.save(canonical_img, os.path.join(save_path, dir_name, os.path.basename(scan.volume_path)))
+        nib.save(canonical_seg, os.path.join(save_path, dir_name, os.path.basename(scan.label_path)))
 
 
 def get_all_size_priors(data_path, save_path, scan_type, body_part_choice=None):
@@ -253,9 +259,10 @@ if __name__ == '__main__':
 
     save_path_dir_change = "/home/eva/PhD/Data/VerSe2019/Processed/directionChanged"
     save_path_resample = "/home/eva/PhD/Data/VerSe2019/Processed/resampled"
-    dummy_path = '/home/eva/PhD/Data/VerSe2019/training_phase_1_dummy'
+    dummy_path = '/home/eva/PhD/Data/VerSe2019/Processed/padded_debug'
+    dummy_path_out='/home/eva/PhD/Data/VerSe2019/Processed/padded_ro'
     scan_type = "VERSE"
-    # change_directions_for_all(data_path_verse, save_path_dir_change, scan_type=scan_type,  body_part_choice=None)
+    # change_directions_for_all('/home/eva/PhD/Data/VerSe2019/Processed/padded_debug', '/home/eva/PhD/Data/VerSe2019/Processed/padded_ro', scan_type=scan_type,  body_part_choice=None)
     # resample_to_common_spacing(save_path_dir_change, save_path_resample, scan_type=scan_type,  body_part_choice=None, spacing=[1,1,1])
     # shrink_in_path = save_path_verse
     shrink_out_path = "/home/eva/PhD/Data/VerSe2019/Processed/halfres"
@@ -263,6 +270,7 @@ if __name__ == '__main__':
     # shrink_all_scans(save_path_resample, shrink_out_path, shrink_factor=2, scan_type=scan_type)
 
     # get_all_size_priors(shrink_out_path, sizes_out_path, scan_type='VERSE')
+    # get_all_size_priors('/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base_halfres', sizes_out_path, scan_type='NIFTY')
 
     colormap_current = '/home/eva/PhD/Data/VerSe2019/colormap.ctbl'
     target_colormap = '/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base/colormap/colormap.ctbl'
@@ -280,8 +288,8 @@ if __name__ == '__main__':
 
     padded_path_flipped = '/home/eva/PhD/Data/VerSe2019/Processed/padded_flipped'
     padded_path = '/home/eva/PhD/Data/VerSe2019/Processed/padded'
-    pad_all_to_fixed_size(flipped_path, padded_path_flipped, scan_type='VERSE', target_size=[256,256,256])
-    pad_all_to_fixed_size(relabel_path, padded_path, scan_type='VERSE', target_size=[256,256,256])
+    # pad_all_to_fixed_size(flipped_path, padded_path_flipped, scan_type='VERSE', target_size=[256,256,256])
+    # pad_all_to_fixed_size(relabel_path, padded_path, scan_type='VERSE', target_size=[256,256,256])
 
     # get_all_orientations(data_path_verse, 'VERSE')
     print('halfres')
@@ -295,7 +303,7 @@ if __name__ == '__main__':
     flipped_all_path='/home/eva/PhD/Data/VerSe2019/Processed/padded_permuted_flipped'
     # flip_all_dimensions(permute_path_out, flipped_all_path, 'VERSE')
     flipped_le_ri_path = '/home/eva/PhD/Data/VerSe2019/Processed/padded_permuted_flipped_le_ri'
-    flip_left_right(flipped_all_path, flipped_le_ri_path, scan_type='VERSE')
+    # flip_left_right(flipped_all_path, flipped_le_ri_path, scan_type='VERSE')
 
     # print_all_orientations(reorient_res_path, scan_type='VERSE')
     reorient_path2 = '/home/eva/PhD/Data/VerSe2019_reorient_res2'

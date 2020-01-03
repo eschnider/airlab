@@ -6,7 +6,7 @@ from examples.customRegistration import RigidRegistrator, BsplineRegistrator
 from examples.customData import RegistrationData, SkeletonScan, collect_skeleton_scans, \
     collect_verse_scans
 import numpy as np
-from sklearn.decomposition import PCA
+# from sklearn.decomposition import PCA
 import torch as th
 import time
 import csv
@@ -151,23 +151,31 @@ def main(body_part_choice='lower', reference_scan_name='001_lower'):
         save_file(test_image_warped, scan_save_dir, file_name)
 
 
-def scans_to_csv(body_part_choice, include_pca_scans, include_verse_scans=False):
-    csv_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/csv_files"
-    pca_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/pca"
-    data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base"
-    verse_path = "/home/eva/PhD/Data/VerSe2019"
+def scans_to_csv(body_part_choice, include_pca_scans, include_verse_scans=False, include_flipped_scans=False):
+    csv_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/csv_files_new"
+    pca_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/pca_halfres"
+    data_path = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base_halfres"
+    data_path_flipped = "/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base_halfres_flipped"
+    verse_path = "/home/eva/PhD/Data/VerSe2019/Processed/padded"
+    verse_path_flipped = "/home/eva/PhD/Data/VerSe2019/Processed/padded_flipped"
 
     run_type = 'base'
 
     volume_type = 'volume'
     label_type = 'binary_bones'
+    label_type = 'bones'
     paths_to_include = [data_path]
     if include_pca_scans is True:
         paths_to_include.append(pca_path)
         run_type = '{}_pca'.format(run_type)
-    verse_subpaths_to_include = ['training_phase_1_release', 'training_phase_2_release', 'training_phase_3_release']
+    if include_flipped_scans is True:
+        paths_to_include.append(data_path_flipped)
+        run_type = '{}_withFlip'.format(run_type)
     if include_verse_scans:
+        verse_paths_to_include = [verse_path]
         run_type = '{}_withVerse'.format(run_type)
+        if include_flipped_scans is True:
+            verse_paths_to_include.append(verse_path_flipped)
 
     all_scans = []  # type: (list[SkeletonScan])
     file_naming = {'volume': '{}.nii.gz'.format(volume_type),
@@ -189,13 +197,15 @@ def scans_to_csv(body_part_choice, include_pca_scans, include_verse_scans=False)
         file_naming_verse = None
         if label_type == 'binary_bones':
             file_naming_verse = {'label': '_seg_binary.nii.gz'}
-        for subpath_name in verse_subpaths_to_include:
-            subpath = os.path.join(verse_path, subpath_name)
-            verse_scans = collect_verse_scans(subpath, file_naming=file_naming_verse)
-            all_scans = all_scans + verse_scans
+        verse_scans=[]
+        for path_to_include in verse_paths_to_include:
+            scans_to_add = collect_verse_scans(path_to_include, file_naming=file_naming_verse)
+            verse_scans = verse_scans + scans_to_add
+        all_scans = all_scans + verse_scans
 
     all_file_names = []
 
+    # in case of duplicates, rename scans
     for scan in all_scans:
         i = 0
         scan_name = scan.name
@@ -458,6 +468,7 @@ if __name__ == "__main__":
 
 
     include_pca_scans = False
-    include_verse_scans = False
-    body_part_choice = 'all'
-    scans_to_csv(body_part_choice, include_pca_scans, include_verse_scans)
+    include_verse_scans = True
+    include_flipped_scans = True
+    body_part_choice = 'upper'
+    scans_to_csv(body_part_choice, include_pca_scans, include_verse_scans, include_flipped_scans)
