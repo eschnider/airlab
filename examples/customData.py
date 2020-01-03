@@ -194,8 +194,8 @@ class Scan:
 
     def add_padding(self, padding_per_dimension, filling_constant, file_type='all'):
         pad_filter = sitk.ConstantPadImageFilter()
-        padding_upper = list(np.ceil(np.array(padding_per_dimension)/2))
-        padding_lower = list(np.floor(np.array(padding_per_dimension)/2))
+        padding_upper = list(np.ceil(np.array(padding_per_dimension) / 2))
+        padding_lower = list(np.floor(np.array(padding_per_dimension) / 2))
         pad_filter.SetPadLowerBound(sitk.VectorUInt32([int(i) for i in padding_lower]))
         pad_filter.SetPadUpperBound(sitk.VectorUInt32([int(i) for i in padding_upper]))
         pad_filter.SetConstant(filling_constant)
@@ -204,8 +204,9 @@ class Scan:
     def save_scan_to(self, save_dir, exist_ok=False, save_gzipped=True):
         def keep_gz_ending(file_path):
             return file_path
+
         def remove_gz_ending(file_path):
-            base_name=os.path.basename(file_path)
+            base_name = os.path.basename(file_path)
             if base_name.endswith('.gz'):
                 base_name_without_gz = base_name[0:-3]
             else:
@@ -218,9 +219,9 @@ class Scan:
             while os.path.exists(save_dir):
                 save_dir = "{}_Copy".format(save_dir)
         if save_gzipped is False:
-            suffix_operation=remove_gz_ending
+            suffix_operation = remove_gz_ending
         else:
-            suffix_operation=keep_gz_ending
+            suffix_operation = keep_gz_ending
         scan_save_path = os.path.join(save_dir, self.name)
         if not os.path.exists(scan_save_path):
             os.makedirs(scan_save_path, exist_ok=False)
@@ -284,6 +285,8 @@ class VerseScan(Scan):
     _default_displacement_name = ""
 
     def __init__(self, scan_dir, base_name, file_naming=None):
+        if 'verse' not in base_name:
+            base_name = 'verse{}'.format(base_name)
         super().__init__(base_name)
         self.path = scan_dir
 
@@ -310,6 +313,7 @@ class VerseScan(Scan):
         self.mask_path = os.path.join(scan_dir, mask_name)
         self.landmarks_path = os.path.join(scan_dir, landmarks_name)
         self.displacement_path = os.path.join(scan_dir, displacement_name)
+
 
 class AbdominalMultiAtlasScan(Scan):
     _default_volume_name = "img"
@@ -369,12 +373,19 @@ def create_resampler(origin, spacing, size, direction=None, default_value=0, int
 
 
 def collect_skeleton_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
-    # collect all dirs in data path
-    scan_dirs = []
-    for scan_dir_name in os.listdir(data_path):
-        scan_dir_name = os.fsdecode(scan_dir_name)
-        scan_dir = os.path.join(data_path, scan_dir_name)
-        scan_dirs.append(scan_dir)
+    """
+    Collect data that is organised like:
+    data_path/
+    ├── 001_lower/
+    │   ├── bones.nii.gz
+    │   ├── volume.nii.gz
+    :param data_path: Root dir of the scans
+    :param reference_scan_name: Name of the scan that should be singled out, if any.
+    :param body_part_choice: 'UPPER' or 'LOWER', otherwise collects both
+    :param file_naming: File naming convention. Standard is 'volume' for CT scan, 'bones' for segmentation.
+    :return: list of SkeletonScans generated from collected data
+    """
+    scan_dirs = get_all_immediate_subdirs(data_path)
 
     # only return scans with a given pattern eg. lower, upper in their name
     reference_scan = None
@@ -395,36 +406,24 @@ def collect_skeleton_scans(data_path, reference_scan_name=None, body_part_choice
         return moving_scans
 
 
-def collect_verse_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
-    # collect all dirs in data path
-    scan_files = []
+def get_all_immediate_subdirs(data_path):
+    # collect all immediate subdirs of data path
+    scan_dirs = []
     for scan_dir_name in os.listdir(data_path):
         scan_dir_name = os.fsdecode(scan_dir_name)
-        data_path_child = os.path.join(data_path, scan_dir_name)
-        if os.path.isfile(data_path_child):
-            scan_files.append(data_path_child)
-        elif os.path.isdir(data_path_child):
-            for sub_sub_dir in os.listdir(data_path_child):
-                sub_sub_dir_path=os.path.join(data_path_child,sub_sub_dir)
-                if os.path.isfile(sub_sub_dir_path):
-                    scan_files.append(sub_sub_dir_path)
+        scan_dir = os.path.join(data_path, scan_dir_name)
+        if os.path.isdir(scan_dir):
+            scan_dirs.append(scan_dir)
+    return scan_dirs
 
-    reference_scan = None
-    moving_scans = []
 
-    all_base_names = []
-    for scan_file in scan_files:
-        file_base_name = os.path.basename(scan_file)
-        file_name_parts = file_base_name.split('.')
-        first_part = file_name_parts[0]
-        base_name = first_part.split('_')[0]
-        if base_name not in all_base_names:
-            all_base_names.append(base_name)
-            current_scan = VerseScan(os.path.dirname(scan_file), base_name, file_naming)
-            if reference_scan_name is not None and current_scan.name == reference_scan_name:
-                reference_scan = current_scan
-            else:
-                moving_scans.append(current_scan)
+def collect_verse_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
+    custom_data_type: Scan = VerseScan
+
+    # collect all files in data path
+    scan_files = _get_all_files_from_subdir_and_subsubdir(data_path)
+
+    moving_scans, reference_scan = get_Scans_from_files(scan_files, custom_data_type, file_naming, reference_scan_name)
 
     # return one list with all N chosen scans, or split in 1 reference_scan and N-1 moving_scans
     if reference_scan is not None:
@@ -432,23 +431,25 @@ def collect_verse_scans(data_path, reference_scan_name=None, body_part_choice=No
     else:
         return moving_scans
 
-def collect_abdominal_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
-    # collect all dirs in data path
-    scan_files = []
-    for scan_dir_name in os.listdir(data_path):
-        scan_dir_name = os.fsdecode(scan_dir_name)
-        data_path_child = os.path.join(data_path, scan_dir_name)
-        if os.path.isfile(data_path_child):
-            scan_files.append(data_path_child)
-        elif os.path.isdir(data_path_child):
-            for sub_sub_dir in os.listdir(data_path_child):
-                sub_sub_dir_path=os.path.join(data_path_child,sub_sub_dir)
-                if os.path.isfile(sub_sub_dir_path):
-                    scan_files.append(sub_sub_dir_path)
 
+def collect_abdominal_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
+    custom_data_type: Scan = AbdominalMultiAtlasScan
+
+    # collect all files in data path
+    scan_files = _get_all_files_from_subdir_and_subsubdir(data_path)
+
+    moving_scans, reference_scan = get_Scans_from_files(scan_files, custom_data_type, file_naming, reference_scan_name)
+
+    # return one list with all N chosen scans, or split in 1 reference_scan and N-1 moving_scans
+    if reference_scan is not None:
+        return moving_scans, reference_scan
+    else:
+        return moving_scans
+
+
+def get_Scans_from_files(scan_files, custom_data_type, file_naming, reference_scan_name):
     reference_scan = None
     moving_scans = []
-
     all_base_names = []
     for scan_file in scan_files:
         file_base_name = os.path.basename(scan_file)
@@ -457,14 +458,24 @@ def collect_abdominal_scans(data_path, reference_scan_name=None, body_part_choic
         base_name = ''.join(filter(str.isdigit, first_part))  # extracts the numbers part e.g. 'imag00123' to '00123'
         if base_name not in all_base_names:
             all_base_names.append(base_name)
-            current_scan = AbdominalMultiAtlasScan(os.path.dirname(scan_file), base_name, file_naming)
+            current_scan = custom_data_type(os.path.dirname(scan_file), base_name, file_naming)
             if reference_scan_name is not None and current_scan.name == reference_scan_name:
                 reference_scan = current_scan
             else:
                 moving_scans.append(current_scan)
+    return moving_scans, reference_scan
 
-    # return one list with all N chosen scans, or split in 1 reference_scan and N-1 moving_scans
-    if reference_scan is not None:
-        return moving_scans, reference_scan
-    else:
-        return moving_scans
+
+def _get_all_files_from_subdir_and_subsubdir(data_path):
+    scan_files = []
+    for scan_dir_name in os.listdir(data_path):
+        scan_dir_name = os.fsdecode(scan_dir_name)
+        data_path_child = os.path.join(data_path, scan_dir_name)
+        if os.path.isfile(data_path_child):
+            scan_files.append(data_path_child)
+        elif os.path.isdir(data_path_child):
+            for sub_sub_dir in os.listdir(data_path_child):
+                sub_sub_dir_path = os.path.join(data_path_child, sub_sub_dir)
+                if os.path.isfile(sub_sub_dir_path):
+                    scan_files.append(sub_sub_dir_path)
+    return scan_files
