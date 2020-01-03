@@ -6,7 +6,7 @@ import nibabel as nib
 import numpy as np
 import torch as th
 
-from examples.customData import collect_skeleton_scans, collect_verse_scans, ScanGroup, collect_abdominal_scans
+from examples.customData import collect_skeleton_scans, collect_verse_scans, ScanGroup, collect_abdominal_scans, collect_lits_scans
 
 
 def resample_to_common_domain(data_path, save_path, body_part_choice, scan_type):
@@ -40,6 +40,8 @@ def get_all_scans(data_path, scan_type, body_part_choice):
         all_chosen_scans = collect_verse_scans(data_path, reference_scan_name=None)
     elif scan_type == 'ABD':
         all_chosen_scans = collect_abdominal_scans(data_path, reference_scan_name=None)
+    elif scan_type == 'LITS':
+        all_chosen_scans = collect_lits_scans(data_path, reference_scan_name=None)
     return all_chosen_scans
 
 

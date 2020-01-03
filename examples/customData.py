@@ -349,6 +349,40 @@ class AbdominalMultiAtlasScan(Scan):
         self.landmarks_path = os.path.join(scan_dir, landmarks_name)
         self.displacement_path = os.path.join(scan_dir, displacement_name)
 
+class Lits17Scan(Scan):
+    _default_volume_name = "volume-"
+    _default_label_name = "segmentation-"
+    _default_mask_name = ""
+    _default_landmarks_name = ""
+    _default_displacement_name = ""
+
+    def __init__(self, scan_dir, base_name, file_naming=None):
+        super().__init__(base_name)
+        self.path = scan_dir
+
+        volume_name = '{}{}.nii.gz'.format(self._default_volume_name, base_name)
+        label_name = '{}{}.nii.gz'.format(self._default_label_name, base_name)
+        mask_name = '{}{}'.format(self._default_mask_name, base_name)
+        landmarks_name = '{}{}'.format(self._default_landmarks_name, base_name)
+        displacement_name = '{}{}'.format(self._default_displacement_name, base_name)
+
+        if file_naming is not None:
+            if 'volume' in file_naming.keys():
+                volume_name = '{}{}.nii.gz'.format(file_naming['volume'], base_name)
+            if 'label' in file_naming.keys():
+                label_name = '{}{}.nii.gz'.format(file_naming['label'], base_name)
+            if 'mask' in file_naming.keys():
+                raise NotImplementedError
+            if 'landmarks' in file_naming.keys():
+                raise NotImplementedError
+            if 'displacement' in file_naming.keys():
+                raise NotImplementedError
+        self.volume_path = os.path.join(scan_dir, volume_name)
+        self.label_path = os.path.join(scan_dir, label_name)
+        self.mask_path = os.path.join(scan_dir, mask_name)
+        self.landmarks_path = os.path.join(scan_dir, landmarks_name)
+        self.displacement_path = os.path.join(scan_dir, displacement_name)
+
 
 def create_resampler(origin, spacing, size, direction=None, default_value=0, interpolator=2):
     # Resample images
@@ -434,6 +468,20 @@ def collect_verse_scans(data_path, reference_scan_name=None, body_part_choice=No
 
 def collect_abdominal_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
     custom_data_type: Scan = AbdominalMultiAtlasScan
+
+    # collect all files in data path
+    scan_files = _get_all_files_from_subdir_and_subsubdir(data_path)
+
+    moving_scans, reference_scan = get_Scans_from_files(scan_files, custom_data_type, file_naming, reference_scan_name)
+
+    # return one list with all N chosen scans, or split in 1 reference_scan and N-1 moving_scans
+    if reference_scan is not None:
+        return moving_scans, reference_scan
+    else:
+        return moving_scans
+
+def collect_lits_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
+    custom_data_type: Scan = Lits17Scan
 
     # collect all files in data path
     scan_files = _get_all_files_from_subdir_and_subsubdir(data_path)
