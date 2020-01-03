@@ -298,6 +298,40 @@ class VerseScan(Scan):
         self.landmarks_path = os.path.join(scan_dir, landmarks_name)
         self.displacement_path = os.path.join(scan_dir, displacement_name)
 
+class AbdominalMultiAtlasScan(Scan):
+    _default_volume_name = "img"
+    _default_label_name = "label"
+    _default_mask_name = ""
+    _default_landmarks_name = ""
+    _default_displacement_name = ""
+
+    def __init__(self, scan_dir, base_name, file_naming=None):
+        super().__init__(base_name)
+        self.path = scan_dir
+
+        volume_name = '{}{}.nii.gz'.format(self._default_volume_name, base_name)
+        label_name = '{}{}.nii.gz'.format(self._default_label_name, base_name)
+        mask_name = '{}{}'.format(self._default_mask_name, base_name)
+        landmarks_name = '{}{}'.format(self._default_landmarks_name, base_name)
+        displacement_name = '{}{}'.format(self._default_displacement_name, base_name)
+
+        if file_naming is not None:
+            if 'volume' in file_naming.keys():
+                volume_name = '{}{}.nii.gz'.format(file_naming['volume'], base_name)
+            if 'label' in file_naming.keys():
+                label_name = '{}{}.nii.gz'.format(file_naming['label'], base_name)
+            if 'mask' in file_naming.keys():
+                raise NotImplementedError
+            if 'landmarks' in file_naming.keys():
+                raise NotImplementedError
+            if 'displacement' in file_naming.keys():
+                raise NotImplementedError
+        self.volume_path = os.path.join(scan_dir, volume_name)
+        self.label_path = os.path.join(scan_dir, label_name)
+        self.mask_path = os.path.join(scan_dir, mask_name)
+        self.landmarks_path = os.path.join(scan_dir, landmarks_name)
+        self.displacement_path = os.path.join(scan_dir, displacement_name)
+
 
 def create_resampler(origin, spacing, size, direction=None, default_value=0, interpolator=2):
     # Resample images
@@ -374,6 +408,43 @@ def collect_verse_scans(data_path, reference_scan_name=None, body_part_choice=No
         if base_name not in all_base_names:
             all_base_names.append(base_name)
             current_scan = VerseScan(os.path.dirname(scan_file), base_name, file_naming)
+            if reference_scan_name is not None and current_scan.name == reference_scan_name:
+                reference_scan = current_scan
+            else:
+                moving_scans.append(current_scan)
+
+    # return one list with all N chosen scans, or split in 1 reference_scan and N-1 moving_scans
+    if reference_scan is not None:
+        return moving_scans, reference_scan
+    else:
+        return moving_scans
+
+def collect_abdominal_scans(data_path, reference_scan_name=None, body_part_choice=None, file_naming=None):
+    # collect all dirs in data path
+    scan_files = []
+    for scan_dir_name in os.listdir(data_path):
+        scan_dir_name = os.fsdecode(scan_dir_name)
+        data_path_child = os.path.join(data_path, scan_dir_name)
+        if os.path.isfile(data_path_child):
+            scan_files.append(data_path_child)
+        elif os.path.isdir(data_path_child):
+            for sub_sub_dir in os.listdir(data_path_child):
+                sub_sub_dir_path=os.path.join(data_path_child,sub_sub_dir)
+                if os.path.isfile(sub_sub_dir_path):
+                    scan_files.append(sub_sub_dir_path)
+
+    reference_scan = None
+    moving_scans = []
+
+    all_base_names = []
+    for scan_file in scan_files:
+        file_base_name = os.path.basename(scan_file)
+        file_name_parts = file_base_name.split('.')
+        first_part = file_name_parts[0]
+        base_name = ''.join(filter(str.isdigit, first_part))  # extracts the numbers part e.g. 'imag00123' to '00123'
+        if base_name not in all_base_names:
+            all_base_names.append(base_name)
+            current_scan = AbdominalMultiAtlasScan(os.path.dirname(scan_file), base_name, file_naming)
             if reference_scan_name is not None and current_scan.name == reference_scan_name:
                 reference_scan = current_scan
             else:

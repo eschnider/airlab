@@ -6,7 +6,7 @@ import nibabel as nib
 import numpy as np
 import torch as th
 
-from examples.customData import collect_skeleton_scans, collect_verse_scans, ScanGroup
+from examples.customData import collect_skeleton_scans, collect_verse_scans, ScanGroup, collect_abdominal_scans
 
 
 def resample_to_common_domain(data_path, save_path, body_part_choice, scan_type):
@@ -38,6 +38,8 @@ def get_all_scans(data_path, scan_type, body_part_choice):
                                                   body_part_choice=body_part_choice)
     elif scan_type == 'VERSE':
         all_chosen_scans = collect_verse_scans(data_path, reference_scan_name=None)
+    elif scan_type == 'ABD':
+        all_chosen_scans = collect_abdominal_scans(data_path, reference_scan_name=None)
     return all_chosen_scans
 
 
@@ -222,7 +224,8 @@ def change_directions_for_all(data_path, save_path, scan_type, body_part_choice=
     scan_group = ScanGroup(all_chosen_scans)
     for scan in scan_group.scans:
         old_direction = scan.volume.direction
-        new_direction = np.array(old_direction) * np.array([-1, -1, -1, -1, -1, -1, 1, 1, 1])
+        # new_direction = np.array(old_direction) * np.array([-1, -1, -1, -1, -1, -1, 1, 1, 1])
+        new_direction = np.array([0,-1,0,1,0,0,0,0,1], dtype=np.double)
         scan.label.direction = new_direction
         scan.volume.direction = new_direction
         scan.save_scan_to(save_path, exist_ok=True)
