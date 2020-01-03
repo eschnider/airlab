@@ -231,6 +231,23 @@ def change_directions_for_all(data_path, save_path, scan_type, body_part_choice=
         scan.save_scan_to(save_path, exist_ok=True)
 
 
+def print_size_priors(data_path):
+    with open(data_path) as f:
+        label_size_dict = json.load(f)
+        sorted_labels_ascending = sorted([int(k) for k in label_size_dict.keys()])
+        for label in sorted_labels_ascending:
+            size_prior = label_size_dict[str(label)]
+            print(str(int(size_prior)) + ',', end=' ')
+
+
+def un_gzip_all(data_path, save_path, scan_type, body_part_choice=None):
+    all_chosen_scans = get_all_scans(data_path, scan_type, body_part_choice)
+    if not os.path.exists(save_path):
+        os.makedirs(save_path, exist_ok=False)
+    scan_group = ScanGroup(all_chosen_scans)
+    for scan in scan_group.scans:
+        scan.save_scan_to(save_path, exist_ok=True, save_gzipped=False)
+
 if __name__ == '__main__':
     data_path_verse = "/home/eva/PhD/Data/VerSe2019/Raw"
 
@@ -284,5 +301,20 @@ if __name__ == '__main__':
     reorient_path2 = '/home/eva/PhD/Data/VerSe2019_reorient_res2'
     # change_all_orientations_to_canonical(reorient_res_path, reorient_path2, 'VERSE')
 
+    # print_size_priors('/home/eva/PhD/Data/VerSe2019/Processed/size_priors/average_sizes.json')
 
+    reorient_path = '/home/eva/PhD/Data/VerSe2019_reorient'
+    reorient_res_path = '/home/eva/PhD/Data/VerSe2019_reorient_res'
+    # change_all_orientations_to_canonical(dummy_path, dummy_path_out, 'VERSE')
+
+    # un_gzip_all('/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base_halfres_flipped','/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base_halfres_flipped_unzipped', 'NIFTY', None)
+    # un_gzip_all('/home/eva/PhD/Data/VerSe2019/Processed/final_flipped','/home/eva/PhD/Data/VerSe2019/Processed/final_flipped_unzipped', 'VERSE', None)
+    # relabel_path='/home/eva/PhD/Data/VerSe2019/Processed/upper_body_relabelled_flipped'
+    # colormap_full_body='/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base/colormap/colormap.ctbl'
+    # colormap_upper_body='/home/eva/PhD/Data/WholeSkeletonsCleaned/Processed/with_labels/base/colormap_upper_lower_separate/upper_body_labels.ctbl'
+    # relabel_all_scans('/home/eva/PhD/Data/VerSe2019/Processed/final_flipped', relabel_path, colormap_full_body, colormap_upper_body,
+    #                   scan_type='VERSE', body_part_choice=None)
+
+    # resample_to_common_spacing('/home/eva/PhD/Data/MultiAtlasAbdomen/original', '/home/eva/PhD/Data/MultiAtlasAbdomen/res', scan_type='ABD',  body_part_choice=None, spacing=[2,2,2])
+    pad_all_to_fixed_size('/home/eva/PhD/Data/MultiAtlasAbdomen/res', '/home/eva/PhD/Data/MultiAtlasAbdomen/pad', scan_type='ABD', target_size=[256,256,128])
 

@@ -201,24 +201,37 @@ class Scan:
         pad_filter.SetConstant(filling_constant)
         self.apply_sitk_filter(pad_filter, file_type)
 
-    def save_scan_to(self, save_dir, exist_ok=False):
+    def save_scan_to(self, save_dir, exist_ok=False, save_gzipped=True):
+        def keep_gz_ending(file_path):
+            return file_path
+        def remove_gz_ending(file_path):
+            base_name=os.path.basename(file_path)
+            if base_name.endswith('.gz'):
+                base_name_without_gz = base_name[0:-3]
+            else:
+                base_name_without_gz = base_name
+            return os.path.join(os.path.dirname(file_path), base_name_without_gz)
+
         if not os.path.exists(save_dir):
             os.makedirs(save_dir, exist_ok=False)
         elif not exist_ok:
             while os.path.exists(save_dir):
                 save_dir = "{}_Copy".format(save_dir)
-
+        if save_gzipped is False:
+            suffix_operation=remove_gz_ending
+        else:
+            suffix_operation=keep_gz_ending
         scan_save_path = os.path.join(save_dir, self.name)
         if not os.path.exists(scan_save_path):
             os.makedirs(scan_save_path, exist_ok=False)
         if os.path.isfile(self.volume_path):
-            volume_file_path = os.path.join(scan_save_path, os.path.basename(self.volume_path))
+            volume_file_path = os.path.join(scan_save_path, os.path.basename(suffix_operation(self.volume_path)))
             self.volume.write(volume_file_path)
         if os.path.isfile(self.mask_path):
-            mask_file_path = os.path.join(scan_save_path, os.path.basename(self.mask_path))
+            mask_file_path = os.path.join(scan_save_path, os.path.basename(suffix_operation(self.mask_path)))
             self.mask.write(mask_file_path)
         if os.path.isfile(self.label_path):
-            label_file_path = os.path.join(scan_save_path, os.path.basename(self.label_path))
+            label_file_path = os.path.join(scan_save_path, os.path.basename(suffix_operation(self.label_path)))
             self.label.write(label_file_path)
 
 
