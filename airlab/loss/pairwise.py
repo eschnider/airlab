@@ -182,6 +182,51 @@ class MSE_multilabel(_PairwiseImageLoss):
 
         return self.return_loss(value)
 
+class MSE_bone_base(_PairwiseImageLoss):
+    r""" The mean square error loss is a simple and fast to compute point-wise measure
+    which is well suited for monomodal image registration.
+
+    .. math::
+         \mathcal{S}_{\text{MSE}} := \frac{1}{\vert \mathcal{X} \vert}\sum_{x\in\mathcal{X}}
+          \Big(I_M\big(x+f(x)\big) - I_F\big(x\big)\Big)^2
+
+    Args:
+        fixed_image (Image): Fixed image for the registration
+        moving_image (Image): Moving image for the registration
+        size_average (bool): Average loss function
+        reduce (bool): Reduce loss function to a single value
+
+    """
+    def __init__(self, fixed_image, moving_image, fixed_mask=None, moving_mask=None, size_average=True, reduce=True):
+        super(MSE_bone_base, self).__init__(fixed_image, moving_image, fixed_mask, moving_mask, size_average, reduce)
+
+        self._name = "mse"
+
+        self.warped_moving_image = None
+
+    def forward(self, displacement):
+
+        # compute displacement field
+        displacement = self._grid + displacement
+
+        # compute current mask
+        mask = super(MSE_bone_base, self).GetCurrentMask(displacement)
+
+        # warp moving image with dispalcement field
+        self.warped_moving_image = F.grid_sample(self._moving_image.image, displacement)
+
+        # compute squared differences
+        bone_mask = th.zeros_like(self._fixed_image.image)
+        bone_mask[self._fixed_image.image > 300] = 1
+        bone_mask[self.warped_moving_image > 300] = 1
+
+        value = ((self.warped_moving_image - self._fixed_image.image)*bone_mask).pow(2)
+
+        # mask values
+        value = th.masked_select(value, mask)
+
+        return self.return_loss(value)
+
 
 class NCC(_PairwiseImageLoss):
     r""" The normalized cross correlation loss is a measure for image pairs with a linear
@@ -305,7 +350,7 @@ class LCC(_PairwiseImageLoss):
 
         # compute current mask
         mask = super(LCC, self).GetCurrentMask(displacement)
-        mask = 1-mask
+        mask = ~mask
         mask = mask.to(dtype=self._dtype, device=self._device)
 
         self._warped_moving_image = F.grid_sample(self._moving_image.image, displacement)

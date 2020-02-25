@@ -42,6 +42,9 @@ class ProjectiveRegistrator(Registrator):
         transformation.init_translation(fixed_reg_data.image)
         registration.set_transformation(transformation)
         # choose the crazy multilabel Mean Squared Error as image loss
+        # image_loss = al.loss.pairwise.MSE(fixed_reg_data.image, moving_reg_data.image,
+        #                                              fixed_mask=fixed_reg_data.mask,
+        #                                              moving_mask=moving_reg_data.mask)
         image_loss = al.loss.pairwise.MSE(fixed_reg_data.image, moving_reg_data.image,
                                                      fixed_mask=fixed_reg_data.mask,
                                                      moving_mask=moving_reg_data.mask)
@@ -110,10 +113,10 @@ class RigidRegistrator(ProjectiveRegistrator):
 
 
 class BsplineRegistrator(Registrator):
-    regularisation_weight = [1e-2, 1e-1, 1e-0, 1e+2]
+    regularisation_weight = [2e-2, 2e-1, 2e-0, 2e+2, 2e+2]
     number_of_iterations = [20, 10, 0, 0]
-    sigma = [[9, 9, 9], [9, 9, 9], [9, 9, 9], [9, 9, 9]]
-    step_size = [3e-3, 4e-3, 2e-3, 2e-3]
+    sigma = [[9, 9, 9], [9, 9, 9], [9, 9, 9], [9, 9, 9], [9, 9, 9]]
+    step_size = [3e-3, 4e-3, 2e-3, 2e-3, 2e-3]
     bspline_order = 3
     temp_displacement_save_path = None
     save_intermediate_displacements = False
@@ -152,7 +155,8 @@ class BsplineRegistrator(Registrator):
                                                                                   sigma=self.sigma[level],
                                                                                   order=self.bspline_order,
                                                                                   dtype=self.dtype,
-                                                                                  device=self.device)
+                                                                                  device=self.device,
+                                                                                  diffeomorphic=True)
 
                 if level > 0:
                     constant_flow = al.transformation.utils.upsample_displacement(constant_flow,
@@ -164,14 +168,17 @@ class BsplineRegistrator(Registrator):
                 registration.set_transformation(transformation)
 
                 # choose the Mean Squared Error as image loss
-                image_loss = al.loss.pairwise.MSE_multilabel(fix_im_level, mov_im_level, moving_mask=mov_msk_level,
-                                                             fixed_mask=fix_msk_level)
-
+                if level > 2:
+                    image_loss = al.loss.pairwise.MSE(fix_im_level, mov_im_level, moving_mask=mov_msk_level,
+                                                                 fixed_mask=fix_msk_level)
+                else:
+                    image_loss = al.loss.pairwise.MSE_bone_base(fix_im_level, mov_im_level, moving_mask=mov_msk_level,
+                                                                fixed_mask=fix_msk_level)
                 registration.set_image_loss([image_loss])
 
                 # define the regulariser for the displacement
                 regulariser = al.regulariser.displacement.DiffusionRegulariser(mov_im_level.spacing)
-                regulariser.SetWeight(self.regularisation_weight[level])
+                regulariser.set_weight(self.regularisation_weight[level])
 
                 registration.set_regulariser_displacement([regulariser])
 
@@ -181,7 +188,7 @@ class BsplineRegistrator(Registrator):
                 registration.set_optimizer(optimizer)
                 registration.set_number_of_iterations(self.number_of_iterations[level])
 
-                registration.start()
+                registration.start(EarlyStopping=True)
 
                 # store current flow field
                 constant_flow = transformation.get_flow()
