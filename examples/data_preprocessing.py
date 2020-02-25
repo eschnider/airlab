@@ -6,7 +6,8 @@ import nibabel as nib
 import numpy as np
 import torch as th
 
-from examples.customData import collect_skeleton_scans, collect_verse_scans, ScanGroup, collect_abdominal_scans, collect_lits_scans
+from examples.customData import collect_skeleton_scans, collect_verse_scans, ScanGroup, collect_abdominal_scans, \
+    collect_lits_scans, Scan
 
 
 def resample_to_common_domain(data_path, save_path, body_part_choice, scan_type):
@@ -14,9 +15,32 @@ def resample_to_common_domain(data_path, save_path, body_part_choice, scan_type)
     # bring all files to a joint image domain and save to disk
     scan_group = ScanGroup(all_chosen_scans)
     scan_group.compute_common_domain()
-    scan_group.resample_common_inplace(file_type='volume', default_value=0, interpolator=1)
-    scan_group.resample_common_inplace(file_type='mask', default_value=0, interpolator=1)
-    scan_group.save_to_disk(save_path, exist_ok=False)
+    # scan_group.resample_common_inplace(file_type='volume', default_value=-1024, interpolator=2)
+    # scan_group.resample_common_inplace(file_type='label', default_value=0, interpolator=1)
+    # scan_group.resample_common_inplace(file_type='mask', default_value=0, interpolator=1)
+    # scan_group.save_to_disk(save_path, exist_ok=False)
+    for scan in scan_group.scans:
+        scan.resample_to(reference_scan=scan_group.scans[0], spacing=scan_group.common_spacing, size=scan_group.common_size, file_type='volume', interpolator=2)
+        scan.resample_to(spacing=scan_group.common_spacing, size=scan_group.common_size, file_type='label', interpolator=1)
+        scan.save_scan_to(save_path, exist_ok=True)
+
+def resample_all_to_reference(data_path, save_path, body_part_choice, scan_type, reference_scan_name):
+    moving_scans, reference_scan = get_reference_and_all_moving_scans(data_path, scan_type, body_part_choice, reference_scan_name)
+    # bring all files to a joint image domain and save to disk
+    scan_group = ScanGroup(moving_scans)
+    scan_group.compute_common_domain()
+    for scan in scan_group.scans:
+        if scan.volume is not None:
+            scan.resample_to(reference_scan=reference_scan, spacing=scan_group.common_spacing,
+                             size=scan_group.common_size, file_type='volume', interpolator=2)
+        if scan.label is not None:
+            scan.resample_to(reference_scan=reference_scan, spacing=scan_group.common_spacing, size=scan_group.common_size, file_type='label',
+                             interpolator=1)
+        if scan.mask is not None:
+            scan.resample_to(reference_scan=reference_scan, spacing=scan_group.common_spacing, size=scan_group.common_size, file_type='mask',
+                             interpolator=1)
+        scan.save_scan_to(save_path, exist_ok=True)
+    reference_scan.save_scan_to(save_path, exist_ok=True)
 
 
 def resample_to_common_spacing(data_path, save_path, scan_type, body_part_choice=None, spacing=None):
@@ -27,8 +51,24 @@ def resample_to_common_spacing(data_path, save_path, scan_type, body_part_choice
         scan_group.compute_common_domain()
         spacing = scan_group.common_spacing
     for scan in scan_group.scans:
-        scan.resample_to(spacing=spacing, file_type='volume', interpolator=2)
-        scan.resample_to(spacing=spacing, file_type='label', interpolator=1)
+        if scan.volume is not None:
+            scan.resample_to(spacing=spacing, file_type='volume', interpolator=2, default_value=-1024)
+        if scan.label is not None:
+            scan.resample_to(spacing=spacing, file_type='label', interpolator=1, default_value=0)
+        scan.save_scan_to(save_path, exist_ok=True)
+
+def resample_to_given_ratio_spacing(data_path, save_path, scan_type, body_part_choice=None, spacing_ratio=[1,1,1]):
+    all_chosen_scans = get_all_scans(data_path, scan_type, body_part_choice)
+    # bring all files to a joint spacing and save to disk
+    scan_group = ScanGroup(all_chosen_scans)
+
+    for scan in scan_group.scans:
+        ratio=np.array(spacing_ratio)
+        spacing = tuple(ratio * np.array(scan.volume.spacing))
+        if scan.volume is not None:
+            scan.resample_to(spacing=spacing, file_type='volume', interpolator=2, default_value=-1024)
+        if scan.label is not None:
+            scan.resample_to(spacing=spacing, file_type='label', interpolator=1, default_value=0)
         scan.save_scan_to(save_path, exist_ok=True)
 
 
@@ -43,6 +83,19 @@ def get_all_scans(data_path, scan_type, body_part_choice):
     elif scan_type == 'LITS':
         all_chosen_scans = collect_lits_scans(data_path, reference_scan_name=None)
     return all_chosen_scans
+
+
+def get_reference_and_all_moving_scans(data_path, scan_type, body_part_choice, reference_scan_name):
+    if scan_type == 'NIFTY':
+        moving_scans, reference_scan = collect_skeleton_scans(data_path, reference_scan_name=reference_scan_name,
+                                                  body_part_choice=body_part_choice)
+    elif scan_type == 'VERSE':
+        moving_scans, reference_scan = collect_verse_scans(data_path, reference_scan_name=reference_scan_name)
+    elif scan_type == 'ABD':
+        moving_scans, reference_scan = collect_abdominal_scans(data_path, reference_scan_name=reference_scan_name)
+    elif scan_type == 'LITS':
+        moving_scans, reference_scan = collect_lits_scans(data_path, reference_scan_name=reference_scan_name)
+    return moving_scans, reference_scan
 
 
 def shrink_all_scans(data_path, save_path, shrink_factor, scan_type, body_part_choice=None):
@@ -92,6 +145,7 @@ def relabel_scan_inplace(scan, current_label_dict, target_label_dict):
     tensor_image = th.from_numpy(label_file).unsqueeze(0).unsqueeze(0)
     scan.label.image = tensor_image
 
+
 def flip_all(data_path, save_path, scan_type, flip_axes, body_part_choice=None):
     all_chosen_scans = get_all_scans(data_path, scan_type, body_part_choice)
 
@@ -120,19 +174,22 @@ def flip_left_right(data_path, save_path, scan_type, colormap=None, body_part_ch
         original_label_dict = get_name_to_label_dict(colormap)
         flipped_label_dict = create_flipped_label_dict(original_label_dict)
         for scan in all_chosen_scans:
-            relabel_scan_inplace(scan, original_label_dict, flipped_label_dict)
             scan.flip(flip_axis_left_right)
+            relabel_scan_inplace(scan, original_label_dict, flipped_label_dict)
             scan.save_scan_to(save_path, exist_ok=True)
+
 
 def flip_front_back(data_path, save_path, scan_type, body_part_choice=None):
     flip_all(data_path, save_path, scan_type, flip_axes=[False, True, False], body_part_choice=body_part_choice)
 
+
 def flip_all_dimensions(data_path, save_path, scan_type, body_part_choice=None):
     flip_all(data_path, save_path, scan_type, flip_axes=[True, True, True], body_part_choice=body_part_choice)
 
+
 def permute_axes(data_path, save_path, scan_type, body_part_choice=None):
     all_chosen_scans = get_all_scans(data_path, scan_type, body_part_choice)
-    new_order = [2,0,1]
+    new_order = [2, 0, 1]
 
     if not os.path.exists(save_path):
         os.makedirs(save_path, exist_ok=False)
@@ -142,6 +199,16 @@ def permute_axes(data_path, save_path, scan_type, body_part_choice=None):
             scan.permute_axes(new_order)
             scan.save_scan_to(save_path, exist_ok=True)
 
+
+def save_all_scans_to(data_path, save_path, scan_type, body_part_choice=None):
+    all_chosen_scans = get_all_scans(data_path, scan_type, body_part_choice)
+
+    if not os.path.exists(save_path):
+        os.makedirs(save_path, exist_ok=False)
+
+    scan_group = ScanGroup(all_chosen_scans)
+    for scan in scan_group.scans:
+        scan.save_scan_to(save_path, exist_ok=True)
 
 
 def create_flipped_label_dict(original_label_dict):
@@ -191,8 +258,8 @@ def change_all_orientations_to_canonical(data_path, save_path, scan_type, body_p
         canonical_img = nib.as_closest_canonical(nib_img)
         canonical_seg = nib.as_closest_canonical(nib_seg)
         print(nib.aff2axcodes(canonical_img.affine))
-        base_name_volume=os.path.basename(scan.volume_path)
-        dir_name=base_name_volume.split('.')[0]
+        base_name_volume = os.path.basename(scan.volume_path)
+        dir_name = base_name_volume.split('.')[0]
         nib.save(canonical_img, os.path.join(save_path, dir_name, os.path.basename(scan.volume_path)))
         nib.save(canonical_seg, os.path.join(save_path, dir_name, os.path.basename(scan.label_path)))
 
@@ -233,7 +300,7 @@ def change_directions_for_all(data_path, save_path, scan_type, body_part_choice=
     for scan in scan_group.scans:
         old_direction = scan.volume.direction
         # new_direction = np.array(old_direction) * np.array([-1, -1, -1, -1, -1, -1, 1, 1, 1])
-        new_direction = np.array([0,-1,0,1,0,0,0,0,1], dtype=np.double)
+        new_direction = np.array([0, -1, 0, 1, 0, 0, 0, 0, 1], dtype=np.double)
         scan.label.direction = new_direction
         scan.volume.direction = new_direction
         scan.save_scan_to(save_path, exist_ok=True)

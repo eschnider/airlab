@@ -86,7 +86,7 @@ class Scan:
 
     @property
     def volume(self):
-        if self._volume is None:
+        if self._volume is None and self.volume_path is not None:
             self._volume = al.Image.read(self.volume_path)
         return self._volume
 
@@ -96,7 +96,7 @@ class Scan:
 
     @property
     def label(self):
-        if self._label is None:
+        if self._label is None and self.label_path is not None:
             self._label = al.Image.read(self.label_path)
         return self._label
 
@@ -106,7 +106,7 @@ class Scan:
 
     @property
     def mask(self):
-        if self._mask is None:
+        if self._mask is None and self.mask_path is not None:
             self._mask = al.Image.read(self.mask_path)
         return self._mask
 
@@ -116,7 +116,7 @@ class Scan:
 
     @property
     def landmarks(self):
-        if self._landmarks is None:
+        if self._landmarks is None and self.landmarks_path is not None:
             self._landmarks = al.utils.Points.read(self.landmarks_path)
         return self._landmarks
 
@@ -126,7 +126,7 @@ class Scan:
 
     @property
     def displacement(self):
-        if self._displacement is None:
+        if self._displacement is None and self.displacement_path is not None:
             self._displacement = al.Displacement.read(self.displacement_path)
         return self._displacement
 
@@ -161,6 +161,11 @@ class Scan:
             elif reference_scan.label is not None:
                 reference_image = reference_scan.label
             origin, extent, spacing, size = al.utils.domain.find_common_domain(reference_image, moving_images)
+            extent = (np.array(moving_images[0].size)) * np.array(moving_images[0].spacing)
+            size=np.array(reference_image.size)
+            origin=moving_images[0].origin
+            spacing=np.array((extent)/size)
+            direction=moving_images[0].direction
         else:
             origin, extent, spacing, size, direction = self.find_domain_for(self.volume, spacing=spacing, size=size)
 
@@ -171,9 +176,9 @@ class Scan:
     def apply_sitk_filter(self, sitk_filter, file_type):
         if file_type == 'volume' or file_type == 'all':
             self.volume = Image(sitk_filter.Execute(self.volume.itk()))
-        if file_type == 'mask' or file_type == 'all':
+        if file_type == 'mask' or file_type == 'all' and self.mask is not None:
             self.mask = Image(sitk_filter.Execute(self.mask.itk()))
-        if file_type == 'label' or file_type == 'all':
+        if file_type == 'label' or file_type == 'all' and self.label is not None:
             self.label = Image(sitk_filter.Execute(self.label.itk()))
 
     def flip(self, flip_axes, file_type='all'):
@@ -228,10 +233,10 @@ class Scan:
         if os.path.isfile(self.volume_path):
             volume_file_path = os.path.join(scan_save_path, os.path.basename(suffix_operation(self.volume_path)))
             self.volume.write(volume_file_path)
-        if os.path.isfile(self.mask_path):
+        if self.mask_path is not None and os.path.isfile(self.mask_path):
             mask_file_path = os.path.join(scan_save_path, os.path.basename(suffix_operation(self.mask_path)))
             self.mask.write(mask_file_path)
-        if os.path.isfile(self.label_path):
+        if self.label_path is not None and os.path.isfile(self.label_path):
             label_file_path = os.path.join(scan_save_path, os.path.basename(suffix_operation(self.label_path)))
             self.label.write(label_file_path)
 
@@ -323,7 +328,9 @@ class AbdominalMultiAtlasScan(Scan):
     _default_displacement_name = ""
 
     def __init__(self, scan_dir, base_name, file_naming=None):
-        super().__init__(base_name)
+        if 'abd' not in base_name:
+            extended_base_name = 'abd{}'.format(base_name)
+        super().__init__(extended_base_name)
         self.path = scan_dir
 
         volume_name = '{}{}.nii.gz'.format(self._default_volume_name, base_name)
@@ -357,7 +364,9 @@ class Lits17Scan(Scan):
     _default_displacement_name = ""
 
     def __init__(self, scan_dir, base_name, file_naming=None):
-        super().__init__(base_name)
+        if 'lits' not in base_name:
+            extended_base_name = 'lits{}'.format(base_name)
+        super().__init__(extended_base_name)
         self.path = scan_dir
 
         volume_name = '{}{}.nii.gz'.format(self._default_volume_name, base_name)
@@ -385,12 +394,22 @@ class Lits17Scan(Scan):
 
 
 def create_resampler(origin, spacing, size, direction=None, default_value=0, interpolator=2):
-    # Resample images
-    # images are resampled in new domain
-    # the default value for resampling is set to a predefined value
-    # (minimum possible value of the fixed image type) to use it
-    # to create masks. At the end, default values are replaced with
-    # the provided default value
+    """
+    Resample images
+    images are resampled in new domain
+    the default value for resampling is set to a predefined value
+    (minimum possible value of the fixed image type) to use it
+    to create masks. At the end, default values are replaced with
+    the provided default value
+    :param origin:
+    :param spacing:
+    :param size:
+    :param direction:
+    :param default_value:
+    :param interpolator:
+    :return:  sitk.ResampleImageFilter
+    """
+
 
     resampler = sitk.ResampleImageFilter()
     resampler.SetSize(size.tolist())

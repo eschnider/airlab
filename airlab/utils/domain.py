@@ -199,9 +199,9 @@ def find_common_domain(reference_image, moving_images):
 
     # common extent
 
-    extent = np.array(reference_image.origin) + (np.array(reference_image.size) - 1) * np.array(reference_image.spacing)
+    extent = - np.array(reference_image.origin) + (np.array(reference_image.size) - 1) * np.array(reference_image.spacing)
     for image in moving_images:
-        m_extent = np.array(image.origin) + (np.array(image.size) - 1) * np.array(image.spacing)
+        m_extent = - np.array(image.origin) + (np.array(image.size) - 1) * np.array(image.spacing)
         extent = np.maximum(extent, m_extent)
 
     # common spacing
